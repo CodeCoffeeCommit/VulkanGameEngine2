@@ -1,0 +1,63 @@
+@'
+# Build directories
+build/
+out/
+x64/
+Debug/
+Release/
+.vs/
+
+# Visual Studio files
+*.vcxproj.user
+*.suo
+*.user
+*.sln.docstates
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+*.aps
+*.ncb
+
+# Compiled binaries
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+*.obj
+*.o
+
+# Compiled shaders (regenerated from source)
+shaders/compiled/*.spv
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Package managers
+vcpkg_installed/
+'@ | Set-Content "D:\Git\VulkanGameEngine2\.gitignore"
