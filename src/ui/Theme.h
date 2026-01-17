@@ -44,6 +44,44 @@ namespace libre::ui {
 
         // Font
         float fontSize = 13.0f;
+               
+        // Slider
+        float sliderHeight = 24.0f;
+        float sliderTrackHeight = 4.0f;
+        float sliderHandleWidth = 12.0f;
+        Color sliderTrack{ 0.15f, 0.15f, 0.15f, 1.0f };
+        Color sliderFill{ 0.3f, 0.5f, 0.8f, 1.0f };  // Same as accent
+
+        // Checkbox
+        float checkboxSize = 16.0f;
+        Color checkboxBackground{ 0.2f, 0.2f, 0.2f, 1.0f };
+        Color checkboxCheck{ 0.3f, 0.5f, 0.8f, 1.0f };  // Same as accent
+
+        // TextField
+        float textFieldHeight = 28.0f;
+        Color textFieldBackground{ 0.18f, 0.18f, 0.18f, 1.0f };
+        Color textFieldBorder{ 0.3f, 0.3f, 0.3f, 1.0f };
+        Color textFieldFocusBorder{ 0.3f, 0.5f, 0.8f, 1.0f };  // Same as accent
+        Color textFieldPlaceholder{ 0.5f, 0.5f, 0.5f, 1.0f };
+        Color textFieldCursor{ 0.9f, 0.9f, 0.9f, 1.0f };
+
+        // Scrollbar
+        float scrollbarWidth = 8.0f;
+        float scrollbarMinThumbHeight = 20.0f;
+        Color scrollbarTrack{ 0.15f, 0.15f, 0.15f, 1.0f };
+        Color scrollbarThumb{ 0.35f, 0.35f, 0.35f, 1.0f };
+        Color scrollbarThumbHover{ 0.45f, 0.45f, 0.45f, 1.0f };
+
+        // Separator
+        Color separatorColor{ 0.25f, 0.25f, 0.25f, 1.0f };
+
+        // Property row
+        float propertyLabelWidth = 120.0f;
+        float propertyRowHeight = 26.0f;
+
+        // Section header
+        Color sectionHeaderBackground{ 0.2f, 0.2f, 0.2f, 1.0f };
+        Color sectionHeaderHover{ 0.25f, 0.25f, 0.25f, 1.0f };
     };
 
     // Global theme access

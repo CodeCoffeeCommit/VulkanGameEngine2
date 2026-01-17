@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <limits>
 #include <array>
+#include <algorithm>
 
 SwapChain::SwapChain() {}
 

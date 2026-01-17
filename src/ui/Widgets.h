@@ -185,5 +185,235 @@ namespace libre::ui {
         float dragOffsetY_ = 0;
         bool closeHovered_ = false;
     };
+    // ============================================================================
+    // CHECKBOX
+    // ============================================================================
 
+    class Checkbox : public Widget {
+    public:
+        Checkbox(const std::string& label = "");
+
+        void draw(UIRenderer& renderer) override;
+        bool handleMouse(const MouseEvent& event) override;
+
+        std::string label;
+        bool checked = false;
+        std::function<void(bool)> onChange;
+
+    private:
+        Rect boxBounds_;
+        static constexpr float BOX_SIZE = 16.0f;
+    };
+
+    // ============================================================================
+    // SLIDER
+    // ============================================================================
+
+    class Slider : public Widget {
+    public:
+        Slider(float minVal = 0.0f, float maxVal = 1.0f);
+
+        void layout(const Rect& available) override;
+        void draw(UIRenderer& renderer) override;
+        bool handleMouse(const MouseEvent& event) override;
+
+        float value = 0.5f;
+        float minValue = 0.0f;
+        float maxValue = 1.0f;
+        std::string label;
+        bool showValue = true;
+        int precision = 2;  // Decimal places to display
+
+        ValueCallback onChange;
+
+    private:
+        float valueToPosition(float val) const;
+        float positionToValue(float x) const;
+
+        Rect trackBounds_;
+        Rect handleBounds_;
+        bool dragging_ = false;
+        static constexpr float HANDLE_WIDTH = 12.0f;
+        static constexpr float TRACK_HEIGHT = 4.0f;
+        static constexpr float LABEL_WIDTH = 80.0f;
+        static constexpr float VALUE_WIDTH = 50.0f;
+    };
+
+    // ============================================================================
+    // TEXT FIELD (Single-line text input)
+    // ============================================================================
+
+    class TextField : public Widget {
+    public:
+        TextField(const std::string& placeholder = "");
+
+        void draw(UIRenderer& renderer) override;
+        bool handleMouse(const MouseEvent& event) override;
+        bool handleKey(const KeyEvent& event) override;
+
+        std::string text;
+        std::string placeholder;
+        bool password = false;  // Show asterisks instead of text
+        int maxLength = 256;
+
+        std::function<void(const std::string&)> onChange;
+        std::function<void(const std::string&)> onSubmit;  // Called on Enter
+
+    private:
+        bool focused_ = false;
+        size_t cursorPos_ = 0;
+        float cursorBlinkTime_ = 0.0f;
+        bool cursorVisible_ = true;
+
+        // Selection (future enhancement)
+        size_t selectionStart_ = 0;
+        size_t selectionEnd_ = 0;
+    };
+
+    // ============================================================================
+    // NUMERIC FIELD (Number input with increment/decrement)
+    // ============================================================================
+
+    class NumericField : public Widget {
+    public:
+        NumericField(float minVal = 0.0f, float maxVal = 100.0f);
+
+        void layout(const Rect& available) override;
+        void draw(UIRenderer& renderer) override;
+        bool handleMouse(const MouseEvent& event) override;
+        bool handleKey(const KeyEvent& event) override;
+
+        float value = 0.0f;
+        float minValue = 0.0f;
+        float maxValue = 100.0f;
+        float step = 1.0f;
+        std::string label;
+        int precision = 2;
+
+        ValueCallback onChange;
+
+    private:
+        void increment();
+        void decrement();
+        void clampValue();
+
+        Rect fieldBounds_;
+        Rect decrementBounds_;
+        Rect incrementBounds_;
+        bool editing_ = false;
+        std::string editBuffer_;
+        bool decrementHovered_ = false;
+        bool incrementHovered_ = false;
+    };
+
+    // ============================================================================
+    // COLOR PICKER (Simple color selection)
+    // ============================================================================
+
+    class ColorPicker : public Widget {
+    public:
+        ColorPicker();
+
+        void layout(const Rect& available) override;
+        void draw(UIRenderer& renderer) override;
+        bool handleMouse(const MouseEvent& event) override;
+
+        Color color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        std::string label;
+
+        std::function<void(const Color&)> onChange;
+
+    private:
+        Rect previewBounds_;
+        Rect expandedBounds_;
+        bool expanded_ = false;
+
+        // HSV for picker
+        float hue_ = 0.0f;
+        float saturation_ = 1.0f;
+        float brightness_ = 1.0f;
+
+        Color hsvToRgb(float h, float s, float v);
+        void rgbToHsv(const Color& c);
+    };
+
+    // ============================================================================
+    // SEPARATOR (Visual divider)
+    // ============================================================================
+
+    class Separator : public Widget {
+    public:
+        Separator(bool horizontal = true);
+
+        void draw(UIRenderer& renderer) override;
+
+        bool horizontal = true;
+    };
+
+    // ============================================================================
+    // SCROLL AREA (Scrollable container)
+    // ============================================================================
+
+    class ScrollArea : public Widget {
+    public:
+        ScrollArea();
+
+        void layout(const Rect& available) override;
+        void draw(UIRenderer& renderer) override;
+        bool handleMouse(const MouseEvent& event) override;
+
+        float scrollOffset = 0.0f;
+        bool showScrollbar = true;
+
+    private:
+        float contentHeight_ = 0.0f;
+        float maxScroll_ = 0.0f;
+        Rect scrollbarBounds_;
+        Rect thumbBounds_;
+        bool scrollbarDragging_ = false;
+        float dragStartOffset_ = 0.0f;
+    };
+
+    // ============================================================================
+    // PROPERTY ROW (Label + Widget combination for settings)
+    // ============================================================================
+
+    class PropertyRow : public Widget {
+    public:
+        PropertyRow(const std::string& label, std::unique_ptr<Widget> control);
+
+        void layout(const Rect& available) override;
+        void draw(UIRenderer& renderer) override;
+        bool handleMouse(const MouseEvent& event) override;
+        bool handleKey(const KeyEvent& event) override;
+
+        std::string label;
+        float labelWidth = 120.0f;
+
+    private:
+        std::unique_ptr<Widget> control_;
+        Rect labelBounds_;
+        Rect controlBounds_;
+    };
+
+    // ============================================================================
+    // COLLAPSIBLE SECTION (For grouping preferences)
+    // ============================================================================
+
+    class CollapsibleSection : public Widget {
+    public:
+        CollapsibleSection(const std::string& title);
+
+        void layout(const Rect& available) override;
+        void draw(UIRenderer& renderer) override;
+        bool handleMouse(const MouseEvent& event) override;
+
+        std::string title;
+        bool collapsed = false;
+
+    private:
+        Rect headerBounds_;
+        Rect contentBounds_;
+        bool headerHovered_ = false;
+    };
 } // namespace libre::ui
