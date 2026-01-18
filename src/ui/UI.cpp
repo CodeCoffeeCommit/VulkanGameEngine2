@@ -1,3 +1,4 @@
+// src/ui/UI.cpp
 #include "UI.h"
 #include <iostream>
 
@@ -27,7 +28,6 @@ namespace libre::ui {
     }
 
     Widget* UIManager::findWidget(const std::string& id) {
-        // Simple search - extend later if needed
         (void)id;
         return nullptr;
     }
@@ -36,12 +36,10 @@ namespace libre::ui {
         mouseX_ = x;
         mouseY_ = y;
 
-        // Create move event
         MouseEvent event;
         event.x = x;
         event.y = y;
 
-        // Update hover states (windows first, they're on top)
         for (auto it = windows_.rbegin(); it != windows_.rend(); ++it) {
             (*it)->handleMouse(event);
         }
@@ -63,15 +61,12 @@ namespace libre::ui {
         event.pressed = pressed;
         event.released = !pressed;
 
-        // Windows first (topmost)
         for (auto it = windows_.rbegin(); it != windows_.rend(); ++it) {
             if ((*it)->handleMouse(event)) return;
         }
 
-        // Menu bar
         if (menuBar_ && menuBar_->handleMouse(event)) return;
 
-        // Root widgets
         for (auto& widget : widgets_) {
             if (widget->handleMouse(event)) return;
         }
@@ -116,56 +111,37 @@ namespace libre::ui {
         auto& theme = GetTheme();
         float menuBarHeight = menuBar_ ? theme.panelHeaderHeight : 0;
 
-        // Menu bar at top
         if (menuBar_) {
             menuBar_->layout({ 0, 0, screenWidth, theme.panelHeaderHeight });
         }
 
-        // Layout root widgets (for now, just stack them on the left side)
         float y = menuBarHeight;
-        float panelWidth = 250.0f;  // Fixed width for side panels
+        float panelWidth = 250.0f;
 
         for (auto& widget : widgets_) {
-            float panelHeight = 200.0f;  // Default height
+            float panelHeight = 200.0f;
             widget->layout({ 0, y, panelWidth, panelHeight });
             y += panelHeight;
         }
 
-        // Windows keep their own position, just recalculate internal layout
         for (auto& window : windows_) {
             window->layout(window->bounds);
         }
     }
 
-
-    // In src/ui/UI.cpp - Replace the render() function with this:
-
     void UIManager::render(VkCommandBuffer cmd) {
         renderer_.begin(screenWidth_, screenHeight_);
 
-
-            
-        /*
-              Rendering Pipeline 
-              Text was left for testing purposes. Can Be Removed...
-                renderer_.drawText("HELLO WORLD", 100, 100, Color(1.0f, 1.0f, 1.0f, 1.0f), 32.0f);
-                renderer_.drawText("File", 10, 5, Color(1.0f, 0.0f, 0.0f, 1.0f), 16.0f); 
-        */
-
-
-        // Draw root widgets
         for (auto& widget : widgets_) {
             if (widget->visible) {
                 widget->draw(renderer_);
             }
         }
 
-        // Draw menu bar
         if (menuBar_) {
             menuBar_->draw(renderer_);
         }
 
-        // Draw windows on top
         for (auto& window : windows_) {
             if (window->isOpen) {
                 window->draw(renderer_);
@@ -174,7 +150,5 @@ namespace libre::ui {
 
         renderer_.end(cmd);
     }
-   
-    
-    
-}  
+
+} // namespace libre::ui

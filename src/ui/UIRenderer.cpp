@@ -1,6 +1,6 @@
 // src/ui/UIRenderer.cpp
 #include "UIRenderer.h"
-#include "../src/render/VulkanContext.h"
+#include "../render/VulkanContext.h"
 #include <fstream>
 #include <stdexcept>
 #include <iostream>
@@ -15,7 +15,7 @@ namespace libre::ui {
         if (!file.is_open()) {
             throw std::runtime_error("Failed to open file: " + filename);
         }
-        size_t fileSize = (size_t)file.tellg();
+        size_t fileSize = static_cast<size_t>(file.tellg());
         std::vector<char> buffer(fileSize);
         file.seekg(0);
         file.read(buffer.data(), fileSize);
@@ -28,10 +28,8 @@ namespace libre::ui {
         createPipeline(renderPass);
         createBuffers();
 
-        // Initialize FreeType font system
         FontSystem& fonts = FontSystem::instance();
         if (fonts.init(context)) {
-            // Load default fonts - adjust paths as needed
             bool fontsLoaded = fonts.loadFontFamily(FontSystem::DEFAULT_FONT,
                 "fonts/Inter-Regular.ttf",
                 "fonts/Inter-Bold.ttf",
@@ -42,7 +40,6 @@ namespace libre::ui {
                 std::cerr << "[UIRenderer] Warning: Could not load Inter font family\n";
             }
 
-            // Load monospace font for numbers/code
             if (!fonts.loadFont(FontSystem::MONOSPACE_FONT, "fonts/JetBrainsMono-Regular.ttf")) {
                 std::cerr << "[UIRenderer] Warning: Could not load monospace font\n";
             }
@@ -63,7 +60,6 @@ namespace libre::ui {
 
         vkDeviceWaitIdle(device);
 
-        // Cleanup font system
         if (fontSystemInitialized_) {
             FontSystem::instance().shutdown();
             fontSystemInitialized_ = false;
@@ -106,7 +102,6 @@ namespace libre::ui {
     }
 
     void UIRenderer::end(VkCommandBuffer cmd) {
-        // Flush font atlas updates to GPU
         if (fontSystemInitialized_) {
             FontSystem::instance().flushAtlas(cmd);
         }
@@ -140,7 +135,6 @@ namespace libre::ui {
         float nx1 = (x1 / screenWidth_) * 2.0f - 1.0f;
         float ny1 = (y1 / screenHeight_) * 2.0f - 1.0f;
 
-        // UV of -1 signals "no texture" to the shader
         vertices_.push_back({ {nx0, ny0}, {-1, -1}, c });
         vertices_.push_back({ {nx1, ny0}, {-1, -1}, c });
         vertices_.push_back({ {nx1, ny1}, {-1, -1}, c });
@@ -151,7 +145,6 @@ namespace libre::ui {
     }
 
     void UIRenderer::drawRoundedRect(const Rect& bounds, const Color& color, float radius) {
-        // TODO: Implement proper rounded corners with SDF or tessellation
         drawRect(bounds, color);
     }
 
@@ -166,11 +159,13 @@ namespace libre::ui {
     // TEXT RENDERING
     // ========================================================================
 
-    void UIRenderer::drawText(const std::string& text, float x, float y, const Color& color, float size) {
+    void UIRenderer::drawText(const std::string& text, float x, float y,
+        const Color& color, float size) {
         drawTextEx(text, x, y, color, size, FontSystem::DEFAULT_FONT, FontWeight::Regular);
     }
 
-    void UIRenderer::drawTextEx(const std::string& text, float x, float y, const Color& color, float size,
+    void UIRenderer::drawTextEx(const std::string& text, float x, float y,
+        const Color& color, float size,
         const std::string& fontName, FontWeight weight) {
         if (!fontSystemInitialized_ || text.empty()) return;
 
@@ -183,20 +178,18 @@ namespace libre::ui {
         }
 
         glm::vec4 c = color.toVec4();
-        float cursorX = x;
-        float baseline = y + font->ascender * 0.8f;  // Position text correctly from top-left
+        float penX = x;
+        float baseline = y + font->ascender;
 
         for (size_t i = 0; i < text.length(); ++i) {
             char ch = text[i];
 
-            // Handle newlines
             if (ch == '\n') {
-                cursorX = x;
+                penX = x;
                 baseline += font->lineHeight;
                 continue;
             }
 
-            // Skip non-printable characters
             if (ch < 32) continue;
 
             auto it = font->glyphs.find(static_cast<uint32_t>(ch));
@@ -204,25 +197,21 @@ namespace libre::ui {
 
             const Glyph& g = it->second;
 
-            // Skip whitespace with no visible glyph
             if (g.size.x == 0 || g.size.y == 0) {
-                cursorX += g.advance / 64.0f;
+                penX += g.advance / 64.0f;
                 continue;
             }
 
-            // Calculate quad position
-            float glyphX = cursorX + g.bearing.x;
-            float glyphY = baseline - g.bearing.y;
+            float glyphX = penX + static_cast<float>(g.bearing.x);
+            float glyphY = baseline - static_cast<float>(g.bearing.y);
             float glyphW = static_cast<float>(g.size.x);
             float glyphH = static_cast<float>(g.size.y);
 
-            // Setup for clipping
             float x0 = glyphX, y0 = glyphY;
             float x1 = glyphX + glyphW, y1 = glyphY + glyphH;
             float u0 = g.uvMin.x, v0 = g.uvMin.y;
             float u1 = g.uvMax.x, v1 = g.uvMax.y;
 
-            // Apply clipping with UV adjustment
             if (!clipStack_.empty()) {
                 const Rect& clip = clipStack_.back();
 
@@ -247,20 +236,17 @@ namespace libre::ui {
                     y1 = clip.bottom();
                 }
 
-                // Skip if fully clipped
                 if (x1 <= x0 || y1 <= y0) {
-                    cursorX += g.advance / 64.0f;
+                    penX += g.advance / 64.0f;
                     continue;
                 }
             }
 
-            // Convert to NDC
             float nx0 = (x0 / screenWidth_) * 2.0f - 1.0f;
             float ny0 = (y0 / screenHeight_) * 2.0f - 1.0f;
             float nx1 = (x1 / screenWidth_) * 2.0f - 1.0f;
             float ny1 = (y1 / screenHeight_) * 2.0f - 1.0f;
 
-            // Add quad (2 triangles)
             vertices_.push_back({ {nx0, ny0}, {u0, v0}, c });
             vertices_.push_back({ {nx1, ny0}, {u1, v0}, c });
             vertices_.push_back({ {nx1, ny1}, {u1, v1}, c });
@@ -269,7 +255,7 @@ namespace libre::ui {
             vertices_.push_back({ {nx1, ny1}, {u1, v1}, c });
             vertices_.push_back({ {nx0, ny1}, {u0, v1}, c });
 
-            cursorX += g.advance / 64.0f;
+            penX += g.advance / 64.0f;
         }
     }
 
@@ -280,12 +266,17 @@ namespace libre::ui {
     Vec2 UIRenderer::measureTextEx(const std::string& text, float size,
         const std::string& fontName, FontWeight weight) {
         if (!fontSystemInitialized_) {
-            // Fallback estimate
-            return Vec2{ text.length() * size * 0.6f, size };
+            return Vec2{ text.length() * size * 0.5f, size };
         }
 
         FontSystem& fonts = FontSystem::instance();
-        glm::vec2 bounds = fonts.measureText(text, fontName, static_cast<int>(size), weight);
+        FontFace* font = fonts.getFont(fontName, static_cast<int>(size), weight);
+
+        if (!font) {
+            return Vec2{ text.length() * size * 0.5f, size };
+        }
+
+        glm::vec2 bounds = fonts.measureText(text, font);
         return Vec2{ bounds.x, bounds.y };
     }
 
@@ -331,7 +322,6 @@ namespace libre::ui {
             return;
         }
 
-        // Upload vertex data
         void* data;
         VkResult mapResult = vkMapMemory(context_->getDevice(), vertexMemory_, 0,
             vertices_.size() * sizeof(UIVertex), 0, &data);
@@ -342,12 +332,10 @@ namespace libre::ui {
         memcpy(data, vertices_.data(), vertices_.size() * sizeof(UIVertex));
         vkUnmapMemory(context_->getDevice(), vertexMemory_);
 
-        // Bind pipeline and descriptors
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipelineLayout_, 0, 1, &descriptorSet_, 0, nullptr);
 
-        // Bind vertex buffer and draw
         VkBuffer buffers[] = { vertexBuffer_ };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(cmd, 0, 1, buffers, offsets);
@@ -358,7 +346,6 @@ namespace libre::ui {
     void UIRenderer::createDescriptorResources() {
         VkDevice device = context_->getDevice();
 
-        // Create descriptor pool
         VkDescriptorPoolSize poolSize{};
         poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         poolSize.descriptorCount = 1;
@@ -374,7 +361,6 @@ namespace libre::ui {
             return;
         }
 
-        // Allocate descriptor set
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo.descriptorPool = descriptorPool_;
@@ -386,7 +372,6 @@ namespace libre::ui {
             return;
         }
 
-        // Update descriptor set with font atlas
         updateFontDescriptor();
     }
 
@@ -415,7 +400,6 @@ namespace libre::ui {
     void UIRenderer::createPipeline(VkRenderPass renderPass) {
         VkDevice device = context_->getDevice();
 
-        // Load shaders
         std::vector<char> vertShaderCode;
         std::vector<char> fragShaderCode;
 
@@ -428,7 +412,6 @@ namespace libre::ui {
             return;
         }
 
-        // Create shader modules
         VkShaderModuleCreateInfo vertCreateInfo{};
         vertCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         vertCreateInfo.codeSize = vertShaderCode.size();
@@ -452,7 +435,6 @@ namespace libre::ui {
             return;
         }
 
-        // Shader stages
         VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
         vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -467,7 +449,6 @@ namespace libre::ui {
 
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-        // Vertex input
         VkVertexInputBindingDescription bindingDescription{};
         bindingDescription.binding = 0;
         bindingDescription.stride = sizeof(UIVertex);
@@ -496,19 +477,16 @@ namespace libre::ui {
         vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
         vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
-        // Input assembly
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-        // Viewport state (dynamic)
         VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportState.viewportCount = 1;
         viewportState.scissorCount = 1;
 
-        // Rasterizer
         VkPipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizer.depthClampEnable = VK_FALSE;
@@ -519,20 +497,17 @@ namespace libre::ui {
         rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
-        // Multisampling
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-        // Depth stencil (disabled for UI)
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = VK_FALSE;
         depthStencil.depthWriteEnable = VK_FALSE;
         depthStencil.stencilTestEnable = VK_FALSE;
 
-        // Color blending (alpha blending for UI)
         VkPipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -550,7 +525,6 @@ namespace libre::ui {
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        // Dynamic state
         std::vector<VkDynamicState> dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR
@@ -561,7 +535,7 @@ namespace libre::ui {
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicState.pDynamicStates = dynamicStates.data();
 
-        // Descriptor set layout
+        // Descriptor set layout for font texture
         VkDescriptorSetLayoutBinding samplerBinding{};
         samplerBinding.binding = 0;
         samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -580,7 +554,6 @@ namespace libre::ui {
             return;
         }
 
-        // Pipeline layout
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
@@ -593,7 +566,6 @@ namespace libre::ui {
             return;
         }
 
-        // Create graphics pipeline
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
@@ -612,7 +584,6 @@ namespace libre::ui {
 
         VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_);
 
-        // Cleanup shader modules
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
 

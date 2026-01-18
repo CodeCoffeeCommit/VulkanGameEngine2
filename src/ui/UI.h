@@ -1,3 +1,4 @@
+// src/ui/UI.h
 #pragma once
 
 #include "Core.h"
@@ -6,11 +7,10 @@
 #include "Widgets.h"
 #include <memory>
 #include <vector>
+
 class VulkanContext;
 
 namespace libre::ui {
-
-    
 
     class UIManager {
     public:
