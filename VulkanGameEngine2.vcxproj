@@ -130,6 +130,7 @@ glfw3dll.lib
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ShaderCompiler.cpp" />
     <ClCompile Include="src\core\Application.cpp" />
     <ClCompile Include="src\core\Camera.cpp" />
     <ClCompile Include="src\core\Editor.cpp" />
@@ -152,6 +153,7 @@ glfw3dll.lib
     <ClCompile Include="src\world\World.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ShaderCompiler.h" />
     <ClInclude Include="src\components\CoreComponents.h" />
     <ClInclude Include="src\core\Application.h" />
     <ClInclude Include="src\core\CallbackData.h" />
@@ -181,6 +183,14 @@ glfw3dll.lib
     <ClInclude Include="src\world\RelationshipStore.h" />
     <ClInclude Include="src\world\Types.h" />
     <ClInclude Include="src\world\World.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\grid.frag" />
+    <None Include="shaders\grid.vert" />
+    <None Include="shaders\ui.frag" />
+    <None Include="shaders\ui.vert" />
+    <None Include="shaders\workbench.frag" />
+    <None Include="shaders\workbench.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

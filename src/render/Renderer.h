@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_map>
 #include <cstdint>
+#include <functional>
 
 // Forward declarations
 class VulkanContext;
@@ -27,6 +28,10 @@ class Renderer {
 public:
     Renderer();
     ~Renderer();
+
+    using UIRenderCallback = std::function<void(VkCommandBuffer)>;
+    void setUIRenderCallback(std::function<void(VkCommandBuffer)> callback);
+   // void setUIRenderCallback(UIRenderCallback callback) { uiRenderCallback_ = callback; }
 
     void init(VulkanContext* context, SwapChain* swapChain);
     void cleanup();
@@ -62,7 +67,7 @@ private:
 
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Camera* camera);
     void updateUniformBuffer(uint32_t currentImage, Camera* camera);
-
+    std::function<void(VkCommandBuffer)> uiRenderCallback_;
     VulkanContext* context = nullptr;
     SwapChain* swapChain = nullptr;
     GraphicsPipeline* pipeline = nullptr;

@@ -1,137 +1,51 @@
 #include "UIRenderer.h"
 #include "../render/VulkanContext.h"
-#include <cstring>
+#include <fstream>
 #include <stdexcept>
+#include <iostream>
+#include <cstring>
 #include <array>
-
+#include <algorithm>
 
 namespace libre::ui {
 
-    // Simple 8x8 bitmap font (ASCII 32-127)
-    // Each character is 8 pixels wide, stored as 8 bytes (one per row)
-    static const unsigned char FONT_DATA[] = {
-        // Space (32) through Tilde (126) - simplified bitmaps
-        // This is a minimal font - replace with proper font atlas later
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // Space
-        0x18,0x18,0x18,0x18,0x18,0x00,0x18,0x00, // !
-        0x6C,0x6C,0x24,0x00,0x00,0x00,0x00,0x00, // "
-        0x6C,0xFE,0x6C,0x6C,0xFE,0x6C,0x00,0x00, // #
-        0x18,0x7E,0x58,0x7C,0x1A,0x7E,0x18,0x00, // $
-        0x66,0x6C,0x18,0x30,0x6C,0xC6,0x00,0x00, // %
-        0x38,0x6C,0x38,0x76,0xCC,0xCC,0x76,0x00, // &
-        0x18,0x18,0x30,0x00,0x00,0x00,0x00,0x00, // '
-        0x0C,0x18,0x30,0x30,0x30,0x18,0x0C,0x00, // (
-        0x30,0x18,0x0C,0x0C,0x0C,0x18,0x30,0x00, // )
-        0x00,0x66,0x3C,0xFF,0x3C,0x66,0x00,0x00, // *
-        0x00,0x18,0x18,0x7E,0x18,0x18,0x00,0x00, // +
-        0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x30, // ,
-        0x00,0x00,0x00,0x7E,0x00,0x00,0x00,0x00, // -
-        0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00, // .
-        0x06,0x0C,0x18,0x30,0x60,0xC0,0x00,0x00, // /
-        0x7C,0xC6,0xCE,0xD6,0xE6,0xC6,0x7C,0x00, // 0
-        0x18,0x38,0x18,0x18,0x18,0x18,0x7E,0x00, // 1
-        0x7C,0xC6,0x06,0x1C,0x30,0x66,0xFE,0x00, // 2
-        0x7C,0xC6,0x06,0x3C,0x06,0xC6,0x7C,0x00, // 3
-        0x1C,0x3C,0x6C,0xCC,0xFE,0x0C,0x1E,0x00, // 4
-        0xFE,0xC0,0xFC,0x06,0x06,0xC6,0x7C,0x00, // 5
-        0x38,0x60,0xC0,0xFC,0xC6,0xC6,0x7C,0x00, // 6
-        0xFE,0xC6,0x0C,0x18,0x30,0x30,0x30,0x00, // 7
-        0x7C,0xC6,0xC6,0x7C,0xC6,0xC6,0x7C,0x00, // 8
-        0x7C,0xC6,0xC6,0x7E,0x06,0x0C,0x78,0x00, // 9
-        0x00,0x18,0x18,0x00,0x00,0x18,0x18,0x00, // :
-        0x00,0x18,0x18,0x00,0x00,0x18,0x18,0x30, // ;
-        0x06,0x0C,0x18,0x30,0x18,0x0C,0x06,0x00, // <
-        0x00,0x00,0x7E,0x00,0x00,0x7E,0x00,0x00, // =
-        0x60,0x30,0x18,0x0C,0x18,0x30,0x60,0x00, // >
-        0x7C,0xC6,0x0C,0x18,0x18,0x00,0x18,0x00, // ?
-        0x7C,0xC6,0xDE,0xDE,0xDE,0xC0,0x7C,0x00, // @
-        0x38,0x6C,0xC6,0xFE,0xC6,0xC6,0xC6,0x00, // A
-        0xFC,0x66,0x66,0x7C,0x66,0x66,0xFC,0x00, // B
-        0x3C,0x66,0xC0,0xC0,0xC0,0x66,0x3C,0x00, // C
-        0xF8,0x6C,0x66,0x66,0x66,0x6C,0xF8,0x00, // D
-        0xFE,0x62,0x68,0x78,0x68,0x62,0xFE,0x00, // E
-        0xFE,0x62,0x68,0x78,0x68,0x60,0xF0,0x00, // F
-        0x3C,0x66,0xC0,0xC0,0xCE,0x66,0x3E,0x00, // G
-        0xC6,0xC6,0xC6,0xFE,0xC6,0xC6,0xC6,0x00, // H
-        0x3C,0x18,0x18,0x18,0x18,0x18,0x3C,0x00, // I
-        0x1E,0x0C,0x0C,0x0C,0xCC,0xCC,0x78,0x00, // J
-        0xE6,0x66,0x6C,0x78,0x6C,0x66,0xE6,0x00, // K
-        0xF0,0x60,0x60,0x60,0x62,0x66,0xFE,0x00, // L
-        0xC6,0xEE,0xFE,0xFE,0xD6,0xC6,0xC6,0x00, // M
-        0xC6,0xE6,0xF6,0xDE,0xCE,0xC6,0xC6,0x00, // N
-        0x7C,0xC6,0xC6,0xC6,0xC6,0xC6,0x7C,0x00, // O
-        0xFC,0x66,0x66,0x7C,0x60,0x60,0xF0,0x00, // P
-        0x7C,0xC6,0xC6,0xC6,0xC6,0xCE,0x7C,0x0E, // Q
-        0xFC,0x66,0x66,0x7C,0x6C,0x66,0xE6,0x00, // R
-        0x7C,0xC6,0x60,0x38,0x0C,0xC6,0x7C,0x00, // S
-        0x7E,0x7E,0x5A,0x18,0x18,0x18,0x3C,0x00, // T
-        0xC6,0xC6,0xC6,0xC6,0xC6,0xC6,0x7C,0x00, // U
-        0xC6,0xC6,0xC6,0xC6,0xC6,0x6C,0x38,0x00, // V
-        0xC6,0xC6,0xC6,0xD6,0xD6,0xFE,0x6C,0x00, // W
-        0xC6,0xC6,0x6C,0x38,0x6C,0xC6,0xC6,0x00, // X
-        0x66,0x66,0x66,0x3C,0x18,0x18,0x3C,0x00, // Y
-        0xFE,0xC6,0x8C,0x18,0x32,0x66,0xFE,0x00, // Z
-        0x3C,0x30,0x30,0x30,0x30,0x30,0x3C,0x00, // [
-        0xC0,0x60,0x30,0x18,0x0C,0x06,0x00,0x00, // backslash
-        0x3C,0x0C,0x0C,0x0C,0x0C,0x0C,0x3C,0x00, // ]
-        0x10,0x38,0x6C,0xC6,0x00,0x00,0x00,0x00, // ^
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF, // _
-        0x30,0x18,0x0C,0x00,0x00,0x00,0x00,0x00, // `
-        0x00,0x00,0x78,0x0C,0x7C,0xCC,0x76,0x00, // a
-        0xE0,0x60,0x7C,0x66,0x66,0x66,0xDC,0x00, // b
-        0x00,0x00,0x7C,0xC6,0xC0,0xC6,0x7C,0x00, // c
-        0x1C,0x0C,0x7C,0xCC,0xCC,0xCC,0x76,0x00, // d
-        0x00,0x00,0x7C,0xC6,0xFE,0xC0,0x7C,0x00, // e
-        0x3C,0x66,0x60,0xF8,0x60,0x60,0xF0,0x00, // f
-        0x00,0x00,0x76,0xCC,0xCC,0x7C,0x0C,0x78, // g
-        0xE0,0x60,0x6C,0x76,0x66,0x66,0xE6,0x00, // h
-        0x18,0x00,0x38,0x18,0x18,0x18,0x3C,0x00, // i
-        0x06,0x00,0x0E,0x06,0x06,0x66,0x66,0x3C, // j
-        0xE0,0x60,0x66,0x6C,0x78,0x6C,0xE6,0x00, // k
-        0x38,0x18,0x18,0x18,0x18,0x18,0x3C,0x00, // l
-        0x00,0x00,0xEC,0xFE,0xD6,0xD6,0xD6,0x00, // m
-        0x00,0x00,0xDC,0x66,0x66,0x66,0x66,0x00, // n
-        0x00,0x00,0x7C,0xC6,0xC6,0xC6,0x7C,0x00, // o
-        0x00,0x00,0xDC,0x66,0x66,0x7C,0x60,0xF0, // p
-        0x00,0x00,0x76,0xCC,0xCC,0x7C,0x0C,0x1E, // q
-        0x00,0x00,0xDC,0x76,0x60,0x60,0xF0,0x00, // r
-        0x00,0x00,0x7C,0xC0,0x7C,0x06,0x7C,0x00, // s
-        0x30,0x30,0xFC,0x30,0x30,0x36,0x1C,0x00, // t
-        0x00,0x00,0xCC,0xCC,0xCC,0xCC,0x76,0x00, // u
-        0x00,0x00,0xC6,0xC6,0xC6,0x6C,0x38,0x00, // v
-        0x00,0x00,0xC6,0xD6,0xD6,0xFE,0x6C,0x00, // w
-        0x00,0x00,0xC6,0x6C,0x38,0x6C,0xC6,0x00, // x
-        0x00,0x00,0xC6,0xC6,0xC6,0x7E,0x06,0x7C, // y
-        0x00,0x00,0xFE,0x8C,0x18,0x32,0xFE,0x00, // z
-        0x0E,0x18,0x18,0x70,0x18,0x18,0x0E,0x00, // {
-        0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x00, // |
-        0x70,0x18,0x18,0x0E,0x18,0x18,0x70,0x00, // }
-        0x76,0xDC,0x00,0x00,0x00,0x00,0x00,0x00, // ~
-    };
+    static std::vector<char> readFile(const std::string& filename) {
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open file: " + filename);
+        }
+        size_t fileSize = (size_t)file.tellg();
+        std::vector<char> buffer(fileSize);
+        file.seekg(0);
+        file.read(buffer.data(), fileSize);
+        file.close();
+        return buffer;
+    }
 
     void UIRenderer::init(VulkanContext* context, VkRenderPass renderPass) {
         context_ = context;
         createPipeline(renderPass);
         createBuffers();
         createFontTexture();
+        std::cout << "[OK] UIRenderer initialized" << std::endl;
     }
 
     void UIRenderer::cleanup() {
         if (!context_) return;
         VkDevice device = context_->getDevice();
 
-        vkDestroySampler(device, fontSampler_, nullptr);
-        vkDestroyImageView(device, fontView_, nullptr);
-        vkDestroyImage(device, fontImage_, nullptr);
-        vkFreeMemory(device, fontMemory_, nullptr);
+        if (fontSampler_) vkDestroySampler(device, fontSampler_, nullptr);
+        if (fontView_) vkDestroyImageView(device, fontView_, nullptr);
+        if (fontImage_) vkDestroyImage(device, fontImage_, nullptr);
+        if (fontMemory_) vkFreeMemory(device, fontMemory_, nullptr);
 
-        vkDestroyBuffer(device, vertexBuffer_, nullptr);
-        vkFreeMemory(device, vertexMemory_, nullptr);
+        if (vertexBuffer_) vkDestroyBuffer(device, vertexBuffer_, nullptr);
+        if (vertexMemory_) vkFreeMemory(device, vertexMemory_, nullptr);
 
-        vkDestroyDescriptorPool(device, descriptorPool_, nullptr);
-        vkDestroyDescriptorSetLayout(device, descriptorSetLayout_, nullptr);
-        vkDestroyPipelineLayout(device, pipelineLayout_, nullptr);
-        vkDestroyPipeline(device, pipeline_, nullptr);
+        if (descriptorPool_) vkDestroyDescriptorPool(device, descriptorPool_, nullptr);
+        if (descriptorSetLayout_) vkDestroyDescriptorSetLayout(device, descriptorSetLayout_, nullptr);
+        if (pipelineLayout_) vkDestroyPipelineLayout(device, pipelineLayout_, nullptr);
+        if (pipeline_) vkDestroyPipeline(device, pipeline_, nullptr);
     }
 
     void UIRenderer::begin(float screenWidth, float screenHeight) {
@@ -147,13 +61,11 @@ namespace libre::ui {
     }
 
     void UIRenderer::drawRect(const Rect& bounds, const Color& color) {
-        // Two triangles for a quad
         glm::vec4 c = color.toVec4();
 
         float x0 = bounds.x, y0 = bounds.y;
         float x1 = bounds.right(), y1 = bounds.bottom();
 
-        // Clip if needed
         if (!clipStack_.empty()) {
             const Rect& clip = clipStack_.back();
             x0 = std::max(x0, clip.x);
@@ -163,42 +75,33 @@ namespace libre::ui {
             if (x1 <= x0 || y1 <= y0) return;
         }
 
-        // Convert to NDC
         float nx0 = (x0 / screenWidth_) * 2.0f - 1.0f;
         float ny0 = (y0 / screenHeight_) * 2.0f - 1.0f;
         float nx1 = (x1 / screenWidth_) * 2.0f - 1.0f;
         float ny1 = (y1 / screenHeight_) * 2.0f - 1.0f;
 
-        // Triangle 1
-        vertices_.push_back({ {nx0, ny0}, {0, 0}, c });
-        vertices_.push_back({ {nx1, ny0}, {1, 0}, c });
-        vertices_.push_back({ {nx1, ny1}, {1, 1}, c });
+        vertices_.push_back({ {nx0, ny0}, {-1, -1}, c });
+        vertices_.push_back({ {nx1, ny0}, {-1, -1}, c });
+        vertices_.push_back({ {nx1, ny1}, {-1, -1}, c });
 
-        // Triangle 2
-        vertices_.push_back({ {nx0, ny0}, {0, 0}, c });
-        vertices_.push_back({ {nx1, ny1}, {1, 1}, c });
-        vertices_.push_back({ {nx0, ny1}, {0, 1}, c });
+        vertices_.push_back({ {nx0, ny0}, {-1, -1}, c });
+        vertices_.push_back({ {nx1, ny1}, {-1, -1}, c });
+        vertices_.push_back({ {nx0, ny1}, {-1, -1}, c });
     }
 
     void UIRenderer::drawRoundedRect(const Rect& bounds, const Color& color, float radius) {
-        // For simplicity, just draw a regular rect for now
-        // TODO: Implement rounded corners with more triangles or SDF
         drawRect(bounds, color);
     }
 
     void UIRenderer::drawRectOutline(const Rect& bounds, const Color& color, float thickness) {
-        // Top
         drawRect({ bounds.x, bounds.y, bounds.w, thickness }, color);
-        // Bottom
         drawRect({ bounds.x, bounds.bottom() - thickness, bounds.w, thickness }, color);
-        // Left
         drawRect({ bounds.x, bounds.y, thickness, bounds.h }, color);
-        // Right
         drawRect({ bounds.right() - thickness, bounds.y, thickness, bounds.h }, color);
     }
 
     void UIRenderer::drawText(const std::string& text, float x, float y, const Color& color, float size) {
-        float scale = size / 8.0f;  // Font is 8 pixels tall
+        float scale = size / 8.0f;
         float charWidth = 8.0f * scale;
         float charHeight = 8.0f * scale;
 
@@ -209,9 +112,6 @@ namespace libre::ui {
             if (ch < 32 || ch > 126) ch = '?';
             int charIndex = ch - 32;
 
-            // UV coordinates in the font atlas
-            // Font atlas is 16x6 characters (96 total), each 8x8 pixels
-            // Atlas size: 128x48 pixels
             int atlasX = charIndex % 16;
             int atlasY = charIndex / 16;
 
@@ -223,13 +123,11 @@ namespace libre::ui {
             float x0 = cursorX, y0 = y;
             float x1 = cursorX + charWidth, y1 = y + charHeight;
 
-            // Convert to NDC
             float nx0 = (x0 / screenWidth_) * 2.0f - 1.0f;
             float ny0 = (y0 / screenHeight_) * 2.0f - 1.0f;
             float nx1 = (x1 / screenWidth_) * 2.0f - 1.0f;
             float ny1 = (y1 / screenHeight_) * 2.0f - 1.0f;
 
-            // Mark as text (use negative UV to signal text rendering in shader)
             vertices_.push_back({ {nx0, ny0}, {u0, v0}, c });
             vertices_.push_back({ {nx1, ny0}, {u1, v0}, c });
             vertices_.push_back({ {nx1, ny1}, {u1, v1}, c });
@@ -252,7 +150,6 @@ namespace libre::ui {
             clipStack_.push_back(bounds);
         }
         else {
-            // Intersect with current clip
             const Rect& current = clipStack_.back();
             Rect clipped;
             clipped.x = std::max(bounds.x, current.x);
@@ -271,15 +168,17 @@ namespace libre::ui {
 
     void UIRenderer::flushBatch(VkCommandBuffer cmd) {
         if (vertices_.empty()) return;
+        if (pipeline_ == VK_NULL_HANDLE) {
+            std::cerr << "[UIRenderer] ERROR: Pipeline is null!" << std::endl;
+            return;
+        }
 
-        // Upload vertices
         void* data;
         vkMapMemory(context_->getDevice(), vertexMemory_, 0,
             vertices_.size() * sizeof(UIVertex), 0, &data);
         memcpy(data, vertices_.data(), vertices_.size() * sizeof(UIVertex));
         vkUnmapMemory(context_->getDevice(), vertexMemory_);
 
-        // Bind and draw
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipelineLayout_, 0, 1, &descriptorSet_, 0, nullptr);
@@ -294,28 +193,214 @@ namespace libre::ui {
     void UIRenderer::createPipeline(VkRenderPass renderPass) {
         VkDevice device = context_->getDevice();
 
-        // Descriptor set layout for font texture
-        VkDescriptorSetLayoutBinding binding{};
-        binding.binding = 0;
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        // Load shaders
+        std::vector<char> vertShaderCode;
+        std::vector<char> fragShaderCode;
+
+        try {
+            vertShaderCode = readFile("shaders/compiled/ui.vert.spv");
+            fragShaderCode = readFile("shaders/compiled/ui.frag.spv");
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[UIRenderer] Failed to load shaders: " << e.what() << std::endl;
+            return;
+        }
+
+        // Create shader modules
+        VkShaderModuleCreateInfo vertCreateInfo{};
+        vertCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        vertCreateInfo.codeSize = vertShaderCode.size();
+        vertCreateInfo.pCode = reinterpret_cast<const uint32_t*>(vertShaderCode.data());
+
+        VkShaderModule vertShaderModule;
+        if (vkCreateShaderModule(device, &vertCreateInfo, nullptr, &vertShaderModule) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create vertex shader module!" << std::endl;
+            return;
+        }
+
+        VkShaderModuleCreateInfo fragCreateInfo{};
+        fragCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        fragCreateInfo.codeSize = fragShaderCode.size();
+        fragCreateInfo.pCode = reinterpret_cast<const uint32_t*>(fragShaderCode.data());
+
+        VkShaderModule fragShaderModule;
+        if (vkCreateShaderModule(device, &fragCreateInfo, nullptr, &fragShaderModule) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create fragment shader module!" << std::endl;
+            vkDestroyShaderModule(device, vertShaderModule, nullptr);
+            return;
+        }
+
+        // Shader stages
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+        // Vertex input
+        VkVertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = 0;
+        bindingDescription.stride = sizeof(UIVertex);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+        attributeDescriptions[0].binding = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(UIVertex, pos);
+
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(UIVertex, uv);
+
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        attributeDescriptions[2].offset = offsetof(UIVertex, color);
+
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+        // Input assembly
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        // Viewport state (dynamic)
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        // Dynamic states
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        // Rasterizer
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_NONE;
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        // Multisampling
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        // Depth stencil - disabled for UI
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_FALSE;
+        depthStencil.depthWriteEnable = VK_FALSE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+        depthStencil.stencilTestEnable = VK_FALSE;
+
+        // Color blending - alpha blending
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_TRUE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+
+        // Descriptor set layout
+        VkDescriptorSetLayoutBinding samplerBinding{};
+        samplerBinding.binding = 0;
+        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerBinding.descriptorCount = 1;
+        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &binding;
-        vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout_);
+        layoutInfo.pBindings = &samplerBinding;
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create descriptor set layout!" << std::endl;
+            vkDestroyShaderModule(device, vertShaderModule, nullptr);
+            vkDestroyShaderModule(device, fragShaderModule, nullptr);
+            return;
+        }
 
         // Pipeline layout
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout_;
-        vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout_);
 
-        // Note: Shader modules should be loaded from files
-        // For now, we assume shaders exist at shaders/compiled/ui.vert.spv and ui.frag.spv
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create pipeline layout!" << std::endl;
+            vkDestroyShaderModule(device, vertShaderModule, nullptr);
+            vkDestroyShaderModule(device, fragShaderModule, nullptr);
+            return;
+        }
+
+        // Create graphics pipeline
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = pipelineLayout_;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+
+        VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_);
+
+        // Cleanup shader modules
+        vkDestroyShaderModule(device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(device, vertShaderModule, nullptr);
+
+        if (result != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create graphics pipeline! Error: " << result << std::endl;
+            return;
+        }
+
+        std::cout << "[OK] UI pipeline created" << std::endl;
     }
 
     void UIRenderer::createBuffers() {
@@ -326,92 +411,90 @@ namespace libre::ui {
         bufferInfo.size = MAX_VERTICES * sizeof(UIVertex);
         bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer_);
 
-        VkMemoryRequirements memReq;
-        vkGetBufferMemoryRequirements(device, vertexBuffer_, &memReq);
+        if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create vertex buffer!" << std::endl;
+            return;
+        }
+
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(device, vertexBuffer_, &memRequirements);
 
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memReq.size;
-        allocInfo.memoryTypeIndex = context_->findMemoryType(
-            memReq.memoryTypeBits,
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = context_->findMemoryType(memRequirements.memoryTypeBits,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        vkAllocateMemory(device, &allocInfo, nullptr, &vertexMemory_);
+
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &vertexMemory_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to allocate vertex buffer memory!" << std::endl;
+            return;
+        }
+
         vkBindBufferMemory(device, vertexBuffer_, vertexMemory_, 0);
+        std::cout << "[OK] UI vertex buffer created" << std::endl;
     }
 
     void UIRenderer::createFontTexture() {
-        // Create a 128x48 font atlas from the bitmap data
-        const int atlasWidth = 128;
-        const int atlasHeight = 48;
-        std::vector<uint8_t> pixels(atlasWidth * atlasHeight * 4, 0);
-
-        // Convert bitmap font to RGBA
-        for (int charIndex = 0; charIndex < 95; charIndex++) {
-            int atlasX = (charIndex % 16) * 8;
-            int atlasY = (charIndex / 16) * 8;
-
-            for (int row = 0; row < 8; row++) {
-                uint8_t rowData = FONT_DATA[charIndex * 8 + row];
-                for (int col = 0; col < 8; col++) {
-                    bool set = (rowData >> (7 - col)) & 1;
-                    int px = atlasX + col;
-                    int py = atlasY + row;
-                    int idx = (py * atlasWidth + px) * 4;
-                    pixels[idx + 0] = 255;
-                    pixels[idx + 1] = 255;
-                    pixels[idx + 2] = 255;
-                    pixels[idx + 3] = set ? 255 : 0;
-                }
-            }
-        }
-
-        // Create Vulkan image (simplified - in real code, use staging buffer)
         VkDevice device = context_->getDevice();
 
+        const int width = 128;
+        const int height = 48;
+        std::vector<unsigned char> pixels(width * height, 255);
+
+        // Create image
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent = { atlasWidth, atlasHeight, 1 };
+        imageInfo.extent.width = width;
+        imageInfo.extent.height = height;
+        imageInfo.extent.depth = 1;
         imageInfo.mipLevels = 1;
         imageInfo.arrayLayers = 1;
-        imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-        imageInfo.tiling = VK_IMAGE_TILING_LINEAR;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-        imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.format = VK_FORMAT_R8_UNORM;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        vkCreateImage(device, &imageInfo, nullptr, &fontImage_);
 
-        VkMemoryRequirements memReq;
-        vkGetImageMemoryRequirements(device, fontImage_, &memReq);
+        if (vkCreateImage(device, &imageInfo, nullptr, &fontImage_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create font image!" << std::endl;
+            return;
+        }
+
+        VkMemoryRequirements memRequirements;
+        vkGetImageMemoryRequirements(device, fontImage_, &memRequirements);
 
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memReq.size;
-        allocInfo.memoryTypeIndex = context_->findMemoryType(
-            memReq.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        vkAllocateMemory(device, &allocInfo, nullptr, &fontMemory_);
-        vkBindImageMemory(device, fontImage_, fontMemory_, 0);
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = context_->findMemoryType(memRequirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        // Copy pixel data
-        void* data;
-        vkMapMemory(device, fontMemory_, 0, memReq.size, 0, &data);
-        memcpy(data, pixels.data(), pixels.size());
-        vkUnmapMemory(device, fontMemory_);
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &fontMemory_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to allocate font image memory!" << std::endl;
+            return;
+        }
+
+        vkBindImageMemory(device, fontImage_, fontMemory_, 0);
 
         // Create image view
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = fontImage_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.format = VK_FORMAT_R8_UNORM;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
-        vkCreateImageView(device, &viewInfo, nullptr, &fontView_);
+
+        if (vkCreateImageView(device, &viewInfo, nullptr, &fontView_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create font image view!" << std::endl;
+            return;
+        }
 
         // Create sampler
         VkSamplerCreateInfo samplerInfo{};
@@ -420,9 +503,20 @@ namespace libre::ui {
         samplerInfo.minFilter = VK_FILTER_NEAREST;
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        vkCreateSampler(device, &samplerInfo, nullptr, &fontSampler_);
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
-        // Create descriptor pool and set
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &fontSampler_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create font sampler!" << std::endl;
+            return;
+        }
+
+        // Create descriptor pool
         VkDescriptorPoolSize poolSize{};
         poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         poolSize.descriptorCount = 1;
@@ -432,28 +526,42 @@ namespace libre::ui {
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
         poolInfo.maxSets = 1;
-        vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool_);
 
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to create descriptor pool!" << std::endl;
+            return;
+        }
+
+        // Allocate descriptor set
         VkDescriptorSetAllocateInfo descAllocInfo{};
         descAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         descAllocInfo.descriptorPool = descriptorPool_;
         descAllocInfo.descriptorSetCount = 1;
         descAllocInfo.pSetLayouts = &descriptorSetLayout_;
-        vkAllocateDescriptorSets(device, &descAllocInfo, &descriptorSet_);
 
+        if (vkAllocateDescriptorSets(device, &descAllocInfo, &descriptorSet_) != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] Failed to allocate descriptor set!" << std::endl;
+            return;
+        }
+
+        // Update descriptor set
         VkDescriptorImageInfo imageDescInfo{};
         imageDescInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageDescInfo.imageView = fontView_;
         imageDescInfo.sampler = fontSampler_;
 
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = descriptorSet_;
-        write.dstBinding = 0;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.descriptorCount = 1;
-        write.pImageInfo = &imageDescInfo;
-        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = descriptorSet_;
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pImageInfo = &imageDescInfo;
+
+        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+
+        std::cout << "[OK] UI font texture created" << std::endl;
     }
 
 } // namespace libre::ui

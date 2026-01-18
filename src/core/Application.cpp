@@ -9,6 +9,7 @@
 #include "../ui/Widgets.h"
 #include "../ui/PreferencesWindow.h"
 #include <iostream>
+#include "..//ShaderCompiler.h"
 
 Application::Application() {
     std::cout << "====================================" << std::endl;
@@ -70,6 +71,13 @@ void Application::setupUI() {
     glfwGetFramebufferSize(window->getHandle(), &w, &h);
     uiManager->layout(static_cast<float>(w), static_cast<float>(h));
 
+
+    // Set UI render callback
+    renderer->setUIRenderCallback([this](VkCommandBuffer cmd) {
+        uiManager->render(cmd);
+        });
+
+
     std::cout << "[OK] UI System initialized" << std::endl;
 }
 
@@ -85,6 +93,10 @@ void Application::openPreferencesWindow() {
 }
 void Application::init() {
     std::cout << "\n[INITIALIZATION]" << std::endl;
+
+    if (!ShaderCompiler::compileAllShaders()) {
+        throw std::runtime_error("Failed to compile shaders!");
+    }
 
     window = std::make_unique<Window>(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE);
     inputManager = std::make_unique<InputManager>(window.get());

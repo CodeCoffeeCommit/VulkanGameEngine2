@@ -55,6 +55,9 @@ void Renderer::onSwapChainRecreated(SwapChain* newSwapChain) {
 
     std::cout << "[Renderer] Updated for new swap chain" << std::endl;
 }
+void Renderer::setUIRenderCallback(std::function<void(VkCommandBuffer)> callback) {
+    uiRenderCallback_ = callback;
+}
 
 void Renderer::cleanup() {
     if (!context) return;
@@ -371,7 +374,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
             obj.mesh->draw(commandBuffer);
         }
     }
-
+    if (uiRenderCallback_) {
+        uiRenderCallback_(commandBuffer);
+    }
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
