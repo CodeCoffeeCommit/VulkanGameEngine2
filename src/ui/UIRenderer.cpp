@@ -167,7 +167,10 @@ namespace libre::ui {
     }
 
     void UIRenderer::flushBatch(VkCommandBuffer cmd) {
-        if (vertices_.empty()) return;
+        if (vertices_.empty()) std::cout << "[DEBUG] No UI vertices to draw!" << std::endl;  // ADD THIS
+        return;
+        std::cout << "[DEBUG] Drawing " << vertices_.size() << " UI vertices" << std::endl;  // ADD THIS
+
         if (pipeline_ == VK_NULL_HANDLE) {
             std::cerr << "[UIRenderer] ERROR: Pipeline is null!" << std::endl;
             return;

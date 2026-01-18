@@ -27,10 +27,14 @@ void Application::run() {
 }
 
 void Application::setupUI() {
+    std::cout << "[DEBUG] Setting up UI..." << std::endl;  // ADD THIS
+    
     using namespace libre::ui;
 
     uiManager = std::make_unique<UIManager>();
     uiManager->init(vulkanContext.get(), swapChain->getRenderPass());
+    
+        
 
     // Create Menu Bar
     auto menuBar = std::make_unique<MenuBar>();

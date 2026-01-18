@@ -375,6 +375,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
         }
     }
     if (uiRenderCallback_) {
+        std::cout << "[DEBUG] Rendering UI..." << std::endl;
         uiRenderCallback_(commandBuffer);
     }
     vkCmdEndRenderPass(commandBuffer);

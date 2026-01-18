@@ -1,4 +1,5 @@
 #include "UI.h"
+#include <iostream>
 
 namespace libre::ui {
 
@@ -137,6 +138,11 @@ namespace libre::ui {
     }
 
     void UIManager::render(VkCommandBuffer cmd) {
+        std::cout << "[DEBUG] UIManager::render - screenWidth=" << screenWidth_
+            << " screenHeight=" << screenHeight_
+            << " menuBar=" << (menuBar_ ? "yes" : "no") << std::endl;  // ADD THIS
+
+
         renderer_.begin(screenWidth_, screenHeight_);
 
         // Draw root widgets
