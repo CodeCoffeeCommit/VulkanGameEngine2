@@ -1,17 +1,14 @@
 #version 450
 
-layout(location = 0) in vec2 fragUV;
-layout(location = 1) in vec4 fragColor;
+layout(location = 0) in vec2 inPos;
+layout(location = 1) in vec2 inUV;
+layout(location = 2) in vec4 inColor;
 
-layout(location = 0) out vec4 outColor;
-
-layout(binding = 0) uniform sampler2D fontTexture;
+layout(location = 0) out vec2 fragUV;
+layout(location = 1) out vec4 fragColor;
 
 void main() {
-    if (fragUV.x < 0.0) {
-        outColor = fragColor;
-    } else {
-        float alpha = texture(fontTexture, fragUV).r;
-        outColor = vec4(fragColor.rgb, fragColor.a * alpha);
-    }
+    gl_Position = vec4(inPos, 0.0, 1.0);
+    fragUV = inUV;
+    fragColor = inColor;
 }

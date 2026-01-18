@@ -9,8 +9,10 @@ layout(binding = 0) uniform sampler2D fontTexture;
 
 void main() {
     if (fragUV.x < 0.0) {
+        // Solid color (rectangles)
         outColor = fragColor;
     } else {
+        // Text - sample font texture for alpha
         float alpha = texture(fontTexture, fragUV).r;
         outColor = vec4(fragColor.rgb, fragColor.a * alpha);
     }
