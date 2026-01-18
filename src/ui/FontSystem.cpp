@@ -179,10 +179,13 @@ namespace libre::ui {
             return false;  // Glyph not found
         }
 
-        FT_Error err = FT_Load_Glyph(face, glyphIndex, FT_LOAD_DEFAULT);
+        // Use LIGHT hinting like Blender - only vertical adjustments
+        // This gives crisp tops/bottoms without distorting letter shapes
+        FT_Error err = FT_Load_Glyph(face, glyphIndex, FT_LOAD_TARGET_LIGHT);
         if (err) return false;
 
-        err = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
+        // Render with light anti-aliasing for better quality
+        err = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_LIGHT);
         if (err) return false;
 
         FT_GlyphSlot slot = face->glyph;
@@ -190,7 +193,7 @@ namespace libre::ui {
 
         outGlyph.size = glm::ivec2(bitmap.width, bitmap.rows);
         outGlyph.bearing = glm::ivec2(slot->bitmap_left, slot->bitmap_top);
-        outGlyph.advance = slot->advance.x;  // In 1/64 pixels
+        outGlyph.advance = slot->advance.x;  // Keep in 1/64 pixels for subpixel positioning
 
         // Pack into atlas
         if (bitmap.width > 0 && bitmap.rows > 0) {
@@ -317,7 +320,7 @@ namespace libre::ui {
             return false;
         }
 
-        // Create sampler with linear filtering for smooth text
+        // Create sampler with LINEAR filtering for smooth subpixel rendering
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_LINEAR;

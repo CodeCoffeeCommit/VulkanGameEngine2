@@ -44,7 +44,7 @@ namespace libre::ui {
         void drawRectOutline(const Rect& bounds, const Color& color, float thickness = 1.0f);
 
         // ========================================================================
-        // TEXT RENDERING (FreeType-based)
+        // TEXT RENDERING (FreeType-based with Blender-style rendering)
         // ========================================================================
 
         // Basic text drawing - uses default font
