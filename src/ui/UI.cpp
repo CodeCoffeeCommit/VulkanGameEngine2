@@ -137,7 +137,66 @@ namespace libre::ui {
         }
     }
 
+
+    // In src/ui/UI.cpp - Replace the render() function with this:
+
     void UIManager::render(VkCommandBuffer cmd) {
+        renderer_.begin(screenWidth_, screenHeight_);
+
+        // ============================================
+        // TEST: Draw a bright red square in the center
+        // ============================================
+        float testSize = 200.0f;
+        float centerX = (screenWidth_ - testSize) / 2.0f;
+        float centerY = (screenHeight_ - testSize) / 2.0f;
+
+        // Bright red square
+        renderer_.drawRect(
+            { centerX, centerY, testSize, testSize },
+            Color(1.0f, 0.0f, 0.0f, 1.0f)  // Red
+        );
+
+        // Smaller green square inside
+        renderer_.drawRect(
+            { centerX + 20, centerY + 20, testSize - 40, testSize - 40 },
+            Color(0.0f, 1.0f, 0.0f, 1.0f)  // Green
+        );
+
+        // Even smaller blue square
+        renderer_.drawRect(
+            { centerX + 40, centerY + 40, testSize - 80, testSize - 80 },
+            Color(0.0f, 0.0f, 1.0f, 1.0f)  // Blue
+        );
+
+        // Debug output
+        std::cout << "[TEST] Drew 3 test squares. Vertex count: "
+            << "screen=" << screenWidth_ << "x" << screenHeight_ << std::endl;
+        // ============================================
+        // END TEST
+        // ============================================
+
+        // Draw root widgets
+        for (auto& widget : widgets_) {
+            if (widget->visible) {
+                widget->draw(renderer_);
+            }
+        }
+
+        // Draw menu bar
+        if (menuBar_) {
+            menuBar_->draw(renderer_);
+        }
+
+        // Draw windows on top
+        for (auto& window : windows_) {
+            if (window->isOpen) {
+                window->draw(renderer_);
+            }
+        }
+
+        renderer_.end(cmd);
+    }
+    /*void UIManager::render(VkCommandBuffer cmd) {
         std::cout << "[DEBUG] UIManager::render - screenWidth=" << screenWidth_
             << " screenHeight=" << screenHeight_
             << " menuBar=" << (menuBar_ ? "yes" : "no") << std::endl;  // ADD THIS
@@ -166,5 +225,5 @@ namespace libre::ui {
 
         renderer_.end(cmd);
     }
-
+    */
 } // namespace libre::ui

@@ -1,6 +1,7 @@
 #include "Widgets.h"
 #include <GLFW/glfw3.h>
 #include <algorithm>
+#include <iostream>
 
 namespace libre::ui {
 
@@ -317,7 +318,11 @@ namespace libre::ui {
 
     void MenuBar::draw(UIRenderer& renderer) {
         auto& theme = GetTheme();
-
+        std::cout << "[DEBUG] MenuBar::draw bounds: x=" << bounds.x
+            << " y=" << bounds.y
+            << " w=" << bounds.w
+            << " h=" << bounds.h
+            << " menus=" << menus_.size() << std::endl;
         // Background
         renderer.drawRect(bounds, theme.backgroundDark);
 

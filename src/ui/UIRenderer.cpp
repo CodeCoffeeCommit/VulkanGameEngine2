@@ -34,18 +34,51 @@ namespace libre::ui {
         if (!context_) return;
         VkDevice device = context_->getDevice();
 
-        if (fontSampler_) vkDestroySampler(device, fontSampler_, nullptr);
-        if (fontView_) vkDestroyImageView(device, fontView_, nullptr);
-        if (fontImage_) vkDestroyImage(device, fontImage_, nullptr);
-        if (fontMemory_) vkFreeMemory(device, fontMemory_, nullptr);
+        vkDeviceWaitIdle(device);
 
-        if (vertexBuffer_) vkDestroyBuffer(device, vertexBuffer_, nullptr);
-        if (vertexMemory_) vkFreeMemory(device, vertexMemory_, nullptr);
+        if (fontSampler_ != VK_NULL_HANDLE) {
+            vkDestroySampler(device, fontSampler_, nullptr);
+            fontSampler_ = VK_NULL_HANDLE;
+        }
+        if (fontView_ != VK_NULL_HANDLE) {
+            vkDestroyImageView(device, fontView_, nullptr);
+            fontView_ = VK_NULL_HANDLE;
+        }
+        if (fontImage_ != VK_NULL_HANDLE) {
+            vkDestroyImage(device, fontImage_, nullptr);
+            fontImage_ = VK_NULL_HANDLE;
+        }
+        if (fontMemory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(device, fontMemory_, nullptr);
+            fontMemory_ = VK_NULL_HANDLE;
+        }
+        if (vertexBuffer_ != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device, vertexBuffer_, nullptr);
+            vertexBuffer_ = VK_NULL_HANDLE;
+        }
+        if (vertexMemory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(device, vertexMemory_, nullptr);
+            vertexMemory_ = VK_NULL_HANDLE;
+        }
+        if (descriptorPool_ != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(device, descriptorPool_, nullptr);
+            descriptorPool_ = VK_NULL_HANDLE;
+        }
+        if (descriptorSetLayout_ != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(device, descriptorSetLayout_, nullptr);
+            descriptorSetLayout_ = VK_NULL_HANDLE;
+        }
+        if (pipelineLayout_ != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(device, pipelineLayout_, nullptr);
+            pipelineLayout_ = VK_NULL_HANDLE;
+        }
+        if (pipeline_ != VK_NULL_HANDLE) {
+            vkDestroyPipeline(device, pipeline_, nullptr);
+            pipeline_ = VK_NULL_HANDLE;
+        }
 
-        if (descriptorPool_) vkDestroyDescriptorPool(device, descriptorPool_, nullptr);
-        if (descriptorSetLayout_) vkDestroyDescriptorSetLayout(device, descriptorSetLayout_, nullptr);
-        if (pipelineLayout_) vkDestroyPipelineLayout(device, pipelineLayout_, nullptr);
-        if (pipeline_) vkDestroyPipeline(device, pipeline_, nullptr);
+        context_ = nullptr;
+        std::cout << "[OK] UIRenderer cleaned up" << std::endl;
     }
 
     void UIRenderer::begin(float screenWidth, float screenHeight) {
@@ -56,7 +89,9 @@ namespace libre::ui {
     }
 
     void UIRenderer::end(VkCommandBuffer cmd) {
-        if (vertices_.empty()) return;
+        if (vertices_.empty()) {
+            return;
+        }
         flushBatch(cmd);
     }
 
@@ -167,25 +202,37 @@ namespace libre::ui {
     }
 
     void UIRenderer::flushBatch(VkCommandBuffer cmd) {
-        if (vertices_.empty()) std::cout << "[DEBUG] No UI vertices to draw!" << std::endl;  // ADD THIS
-        return;
-        std::cout << "[DEBUG] Drawing " << vertices_.size() << " UI vertices" << std::endl;  // ADD THIS
+        if (vertices_.empty()) {
+            return;
+        }
 
         if (pipeline_ == VK_NULL_HANDLE) {
             std::cerr << "[UIRenderer] ERROR: Pipeline is null!" << std::endl;
             return;
         }
 
+        if (vertexBuffer_ == VK_NULL_HANDLE || vertexMemory_ == VK_NULL_HANDLE) {
+            std::cerr << "[UIRenderer] ERROR: Vertex buffer not initialized!" << std::endl;
+            return;
+        }
+
+        // Upload vertex data
         void* data;
-        vkMapMemory(context_->getDevice(), vertexMemory_, 0,
+        VkResult mapResult = vkMapMemory(context_->getDevice(), vertexMemory_, 0,
             vertices_.size() * sizeof(UIVertex), 0, &data);
+        if (mapResult != VK_SUCCESS) {
+            std::cerr << "[UIRenderer] ERROR: Failed to map vertex memory!" << std::endl;
+            return;
+        }
         memcpy(data, vertices_.data(), vertices_.size() * sizeof(UIVertex));
         vkUnmapMemory(context_->getDevice(), vertexMemory_);
 
+        // Bind pipeline and descriptors
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipelineLayout_, 0, 1, &descriptorSet_, 0, nullptr);
 
+        // Bind vertex buffer and draw
         VkBuffer buffers[] = { vertexBuffer_ };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(cmd, 0, 1, buffers, offsets);
@@ -289,17 +336,6 @@ namespace libre::ui {
         viewportState.viewportCount = 1;
         viewportState.scissorCount = 1;
 
-        // Dynamic states
-        std::vector<VkDynamicState> dynamicStates = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR
-        };
-
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-        dynamicState.pDynamicStates = dynamicStates.data();
-
         // Rasterizer
         VkPipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -317,15 +353,16 @@ namespace libre::ui {
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-        // Depth stencil - disabled for UI
+        // Depth stencil - disable depth testing for UI
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = VK_FALSE;
         depthStencil.depthWriteEnable = VK_FALSE;
         depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
         depthStencil.stencilTestEnable = VK_FALSE;
 
-        // Color blending - alpha blending
+        // Color blending with alpha
         VkPipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -342,6 +379,17 @@ namespace libre::ui {
         colorBlending.logicOpEnable = VK_FALSE;
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
+
+        // Dynamic state
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
 
         // Descriptor set layout
         VkDescriptorSetLayoutBinding samplerBinding{};
