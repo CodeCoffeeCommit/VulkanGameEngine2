@@ -114,11 +114,8 @@
     <ClCompile Include="ShaderCompiler.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="FontSystem.h">
-      <Filter>Header Files\FontSystem</Filter>
-    </ClCompile>
-    <ClCompile Include="FontSystem.cpp">
-      <Filter>Source Files\FontSystem</Filter>
+    <ClCompile Include="src\ui\FontSystem.cpp">
+      <Filter>Source Files\ui</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -211,6 +208,9 @@
     </ClInclude>
     <ClInclude Include="ShaderCompiler.h">
       <Filter>Header Files\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\FontSystem.h">
+      <Filter>Header Files\ui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -130,8 +130,6 @@ glfw3dll.lib;freetype.lib
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FontSystem.cpp" />
-    <ClCompile Include="FontSystem.h" />
     <ClCompile Include="ShaderCompiler.cpp" />
     <ClCompile Include="src\core\Application.cpp" />
     <ClCompile Include="src\core\Camera.cpp" />
@@ -148,6 +146,7 @@ glfw3dll.lib;freetype.lib
     <ClCompile Include="src\render\SwapChain.cpp" />
     <ClCompile Include="src\render\UniformBuffer.cpp" />
     <ClCompile Include="src\render\VulkanContext.cpp" />
+    <ClCompile Include="src\ui\FontSystem.cpp" />
     <ClCompile Include="src\ui\PreferencesWindow.cpp" />
     <ClCompile Include="src\ui\UIRenderer.cpp" />
     <ClCompile Include="src\ui\UI.cpp" />
@@ -175,6 +174,7 @@ glfw3dll.lib;freetype.lib
     <ClInclude Include="src\render\UniformBuffer.h" />
     <ClInclude Include="src\render\VulkanContext.h" />
     <ClInclude Include="src\ui\Core.h" />
+    <ClInclude Include="src\ui\FontSystem.h" />
     <ClInclude Include="src\ui\PreferencesWindow.h" />
     <ClInclude Include="src\ui\UIRenderer.h" />
     <ClInclude Include="src\ui\Theme.h" />

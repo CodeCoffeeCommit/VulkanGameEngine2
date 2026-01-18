@@ -184,7 +184,7 @@ namespace libre::ui {
 
         glm::vec4 c = color.toVec4();
         float cursorX = x;
-        float baseline = y + font->ascender;  // Position text correctly from top-left
+        float baseline = y + font->ascender * 0.8f;  // Position text correctly from top-left
 
         for (size_t i = 0; i < text.length(); ++i) {
             char ch = text[i];
