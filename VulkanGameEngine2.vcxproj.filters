@@ -43,6 +43,12 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{158602c2-70fa-4bcd-829f-cb9321347e6a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\FontSystem">
+      <UniqueIdentifier>{e2b4f9f6-dd81-4661-ad3e-6616927ea32a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\FontSystem">
+      <UniqueIdentifier>{f0b14c1a-e5cc-47d2-a84e-1e5236eb7de6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -107,6 +113,12 @@
     </ClCompile>
     <ClCompile Include="ShaderCompiler.cpp">
       <Filter>Source Files\core</Filter>
+    </ClCompile>
+    <ClCompile Include="FontSystem.h">
+      <Filter>Header Files\FontSystem</Filter>
+    </ClCompile>
+    <ClCompile Include="FontSystem.cpp">
+      <Filter>Source Files\FontSystem</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -220,5 +232,6 @@
     <None Include="shaders\ui.vert">
       <Filter>Shaders</Filter>
     </None>
+    <None Include=".editorconfig" />
   </ItemGroup>
 </Project>

@@ -1,7 +1,9 @@
+// src/ui/UIRenderer.h
 #pragma once
 
 #include "Core.h"
 #include "Theme.h"
+#include "FontSystem.h"
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
@@ -41,11 +43,23 @@ namespace libre::ui {
         // Rectangle outline
         void drawRectOutline(const Rect& bounds, const Color& color, float thickness = 1.0f);
 
-        // Text (simple bitmap font)
+        // ========================================================================
+        // TEXT RENDERING (FreeType-based)
+        // ========================================================================
+
+        // Basic text drawing - uses default font
         void drawText(const std::string& text, float x, float y, const Color& color, float size = 13.0f);
 
-        // Measure text dimensions
+        // Advanced text drawing - specify font and weight
+        void drawTextEx(const std::string& text, float x, float y, const Color& color, float size,
+            const std::string& fontName, FontWeight weight = FontWeight::Regular);
+
+        // Measure text dimensions - uses default font
         Vec2 measureText(const std::string& text, float size = 13.0f);
+
+        // Measure text dimensions - specify font and weight
+        Vec2 measureTextEx(const std::string& text, float size,
+            const std::string& fontName, FontWeight weight = FontWeight::Regular);
 
         // ========================================================================
         // CLIPPING
@@ -61,10 +75,14 @@ namespace libre::ui {
         float getScreenWidth() const { return screenWidth_; }
         float getScreenHeight() const { return screenHeight_; }
 
+        // Access to font system for advanced usage
+        FontSystem& getFontSystem() { return FontSystem::instance(); }
+
     private:
         void createPipeline(VkRenderPass renderPass);
         void createBuffers();
-        void createFontTexture();
+        void createDescriptorResources();
+        void updateFontDescriptor();
         void flushBatch(VkCommandBuffer cmd);
 
         VulkanContext* context_ = nullptr;
@@ -81,18 +99,15 @@ namespace libre::ui {
         VkDeviceMemory vertexMemory_ = VK_NULL_HANDLE;
         static constexpr size_t MAX_VERTICES = 65536;
 
-        // Font texture
-        VkImage fontImage_ = VK_NULL_HANDLE;
-        VkDeviceMemory fontMemory_ = VK_NULL_HANDLE;
-        VkImageView fontView_ = VK_NULL_HANDLE;
-        VkSampler fontSampler_ = VK_NULL_HANDLE;
-
         // Batching
         std::vector<UIVertex> vertices_;
         std::vector<Rect> clipStack_;
 
         float screenWidth_ = 0;
         float screenHeight_ = 0;
+
+        // Font system initialized flag
+        bool fontSystemInitialized_ = false;
     };
 
 } // namespace libre::ui

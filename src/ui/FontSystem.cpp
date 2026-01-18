@@ -1,6 +1,6 @@
 // src/ui/FontSystem.cpp
-#include "../src/ui/FontSystem.h"
-#include "../src/render/VulkanContext.h"
+#include "FontSystem.h"
+#include "../render/VulkanContext.h"
 #include <iostream>
 #include <algorithm>
 #include <cstring>

@@ -11,7 +11,7 @@
 #include <memory>
 #include <glm/glm.hpp>
 
-class VulkanContext;
+class VulkanContext;  // Forward declaration
 
 namespace libre::ui {
 
@@ -90,12 +90,11 @@ namespace libre::ui {
         // Atlas access for rendering
         VkImageView getAtlasView() const { return atlasPage_.view; }
         VkSampler getAtlasSampler() const { return sampler_; }
-        VkDescriptorSet getDescriptorSet() const { return descriptorSet_; }
 
         // Update atlas to GPU if dirty
         void flushAtlas(VkCommandBuffer cmd);
 
-        // Default fonts (like Blender's Inter/DejaVu)
+        // Default font names
         static constexpr const char* DEFAULT_FONT = "default";
         static constexpr const char* MONOSPACE_FONT = "mono";
         static constexpr const char* ICON_FONT = "icons";
@@ -128,60 +127,11 @@ namespace libre::ui {
         // Glyph atlas
         AtlasPage atlasPage_;
         VkSampler sampler_ = VK_NULL_HANDLE;
-        VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
 
         // Default atlas size (grows as needed)
         static constexpr int INITIAL_ATLAS_SIZE = 1024;
         static constexpr int MAX_ATLAS_SIZE = 4096;
         static constexpr int GLYPH_PADDING = 2;  // Prevent bleeding
-    };
-
-    // ============================================================================
-    // TEXT LAYOUT ENGINE
-    // ============================================================================
-
-    struct TextRun {
-        std::string text;
-        FontFace* font;
-        glm::vec4 color;
-        float startX;
-    };
-
-    struct LayoutGlyph {
-        Glyph* glyph;
-        glm::vec2 position;
-        glm::vec4 color;
-    };
-
-    enum class TextAlign { Left, Center, Right };
-    enum class TextVAlign { Top, Middle, Bottom };
-
-    struct TextLayoutOptions {
-        float maxWidth = 0;           // 0 = no wrap
-        float lineSpacing = 1.2f;     // Multiplier on line height
-        TextAlign align = TextAlign::Left;
-        TextVAlign valign = TextVAlign::Top;
-        bool ellipsis = false;        // Truncate with "..." if too long
-        int maxLines = 0;             // 0 = unlimited
-    };
-
-    class TextLayout {
-    public:
-        void layout(const std::string& text, FontFace* font,
-            const glm::vec4& color, const TextLayoutOptions& options);
-
-        // Rich text support: [b]bold[/b], [color=#ff0000]red[/color]
-        void layoutRich(const std::string& richText, FontFace* defaultFont,
-            const glm::vec4& defaultColor, const TextLayoutOptions& options);
-
-        const std::vector<LayoutGlyph>& getGlyphs() const { return glyphs_; }
-        glm::vec2 getBounds() const { return bounds_; }
-        int getLineCount() const { return lineCount_; }
-
-    private:
-        std::vector<LayoutGlyph> glyphs_;
-        glm::vec2 bounds_{ 0, 0 };
-        int lineCount_ = 0;
     };
 
 } // namespace libre::ui

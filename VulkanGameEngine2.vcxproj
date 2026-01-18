@@ -109,9 +109,9 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;C:\vcpkg\installed\x64-windows\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\vcpkg\installed\x64-windows\include\freetype2;$(VULKAN_SDK)\Lib;C:\vcpkg\installed\x64-windows\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;
-glfw3dll.lib
+glfw3dll.lib;freetype.lib
 ;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -130,6 +130,8 @@ glfw3dll.lib
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="FontSystem.cpp" />
+    <ClCompile Include="FontSystem.h" />
     <ClCompile Include="ShaderCompiler.cpp" />
     <ClCompile Include="src\core\Application.cpp" />
     <ClCompile Include="src\core\Camera.cpp" />
@@ -185,6 +187,7 @@ glfw3dll.lib
     <ClInclude Include="src\world\World.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include=".editorconfig" />
     <None Include="shaders\grid.frag" />
     <None Include="shaders\grid.vert" />
     <None Include="shaders\ui.frag" />
