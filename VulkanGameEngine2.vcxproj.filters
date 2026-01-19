@@ -40,14 +40,14 @@
     <Filter Include="Header Files\ui">
       <UniqueIdentifier>{cbda7092-2660-4262-bfe9-1034908a986a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Shaders">
-      <UniqueIdentifier>{158602c2-70fa-4bcd-829f-cb9321347e6a}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\FontSystem">
       <UniqueIdentifier>{e2b4f9f6-dd81-4661-ad3e-6616927ea32a}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\FontSystem">
       <UniqueIdentifier>{f0b14c1a-e5cc-47d2-a84e-1e5236eb7de6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\core\Shaders">
+      <UniqueIdentifier>{158602c2-70fa-4bcd-829f-cb9321347e6a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -115,6 +115,9 @@
       <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="src\ui\FontSystem.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Theme.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
   </ItemGroup>
@@ -212,25 +215,28 @@
     <ClInclude Include="src\ui\FontSystem.h">
       <Filter>Header Files\ui</Filter>
     </ClInclude>
+    <ClInclude Include="src\ui\UIScale.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\grid.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Source Files\core\Shaders</Filter>
     </None>
     <None Include="shaders\grid.vert">
-      <Filter>Shaders</Filter>
+      <Filter>Source Files\core\Shaders</Filter>
     </None>
     <None Include="shaders\workbench.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Source Files\core\Shaders</Filter>
     </None>
     <None Include="shaders\workbench.vert">
-      <Filter>Shaders</Filter>
+      <Filter>Source Files\core\Shaders</Filter>
     </None>
     <None Include="shaders\ui.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Source Files\core\Shaders</Filter>
     </None>
     <None Include="shaders\ui.vert">
-      <Filter>Shaders</Filter>
+      <Filter>Source Files\core\Shaders</Filter>
     </None>
     <None Include=".editorconfig" />
   </ItemGroup>

@@ -1,11 +1,23 @@
 // src/ui/UI.cpp
 #include "UI.h"
+#include "UIScale.h"
 #include <iostream>
 
 namespace libre::ui {
 
-    void UIManager::init(VulkanContext* context, VkRenderPass renderPass) {
+    void UIManager::init(VulkanContext* context, VkRenderPass renderPass, GLFWwindow* window) {
+        // Store window handle for later use
+        window_ = window;
+
+        // Initialize the scaling system FIRST (before anything else)
+        // This detects the system DPI and sets the base scale factor
+        UIScale::instance().initialize(window);
+
+        // Now initialize the renderer
         renderer_.init(context, renderPass);
+
+        std::cout << "[UIManager] Initialized with DPI scale: "
+            << UIScale::instance().getScaleFactor() << "\n";
     }
 
     void UIManager::cleanup() {
@@ -109,14 +121,18 @@ namespace libre::ui {
         screenHeight_ = screenHeight;
 
         auto& theme = GetTheme();
-        float menuBarHeight = menuBar_ ? theme.panelHeaderHeight : 0;
+
+        // NOTE: theme.panelHeaderHeight() now returns scaled pixels
+        // The scale factor is constant, so UI size stays the same regardless
+        // of window size. Only the available space changes.
+        float menuBarHeight = menuBar_ ? theme.panelHeaderHeight() : 0;
 
         if (menuBar_) {
-            menuBar_->layout({ 0, 0, screenWidth, theme.panelHeaderHeight });
+            menuBar_->layout({ 0, 0, screenWidth, theme.panelHeaderHeight() });
         }
 
         float y = menuBarHeight;
-        float panelWidth = 250.0f;
+        float panelWidth = 250.0f;  // Could also scale this if desired
 
         for (auto& widget : widgets_) {
             float panelHeight = 200.0f;

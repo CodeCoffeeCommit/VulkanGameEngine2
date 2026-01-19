@@ -1,6 +1,7 @@
 #include "Application.h"
 #include "Editor.h"
 #include "Selection.h"
+#include <iostream>
 #include "../render/SwapChain.h"
 #include "../render/Renderer.h"
 #include "../render/Mesh.h"
@@ -8,8 +9,8 @@
 #include "../ui/UI.h"
 #include "../ui/Widgets.h"
 #include "../ui/PreferencesWindow.h"
-#include <iostream>
 #include "..//ShaderCompiler.h"
+#include "../ui/UIScale.h"
 
 Application::Application() {
     std::cout << "====================================" << std::endl;
@@ -26,15 +27,30 @@ void Application::run() {
     mainLoop();
 }
 
+// In Application.cpp
+
+
+
+// REPLACE your setupUI() function with this:
+
 void Application::setupUI() {
-    std::cout << "[DEBUG] Setting up UI..." << std::endl;  // ADD THIS
-    
+    std::cout << "[DEBUG] Setting up UI..." << std::endl;
+
     using namespace libre::ui;
 
     uiManager = std::make_unique<UIManager>();
-    uiManager->init(vulkanContext.get(), swapChain->getRenderPass());
-    
-        
+
+    // CHANGED: Now passing window handle for DPI detection
+    uiManager->init(vulkanContext.get(), swapChain->getRenderPass(), window->getHandle());
+
+    // Setup callback for when window moves to different monitor (DPI change)
+    glfwSetWindowContentScaleCallback(window->getHandle(),
+        [](GLFWwindow* win, float xscale, float yscale) {
+            libre::ui::UIScale::instance().onMonitorChanged(win);
+            // Scale factor is now updated - fonts may need reload
+            // UI will pick up new scale on next layout/draw
+        }
+    );
 
     // Create Menu Bar
     auto menuBar = std::make_unique<MenuBar>();
@@ -75,12 +91,10 @@ void Application::setupUI() {
     glfwGetFramebufferSize(window->getHandle(), &w, &h);
     uiManager->layout(static_cast<float>(w), static_cast<float>(h));
 
-
     // Set UI render callback
     renderer->setUIRenderCallback([this](VkCommandBuffer cmd) {
         uiManager->render(cmd);
         });
-
 
     std::cout << "[OK] UI System initialized" << std::endl;
 }

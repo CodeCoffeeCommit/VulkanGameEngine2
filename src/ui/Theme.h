@@ -1,3 +1,13 @@
+// src/ui/Theme.h
+// UI Theme with Blender-style DPI scaling
+//
+// Base values are stored in abstract units (design values at scale 1.0).
+// Scaled getters return actual pixel values by multiplying with the scale factor.
+//
+// Usage:
+//   float height = GetTheme().buttonHeight();  // Returns scaled pixels
+//   float baseH = GetTheme().baseButtonHeight; // Returns abstract units
+
 #pragma once
 
 #include "Core.h"
@@ -5,6 +15,77 @@
 namespace libre::ui {
 
     struct Theme {
+        // ====================================================================
+        // BASE VALUES (Abstract units at scale factor 1.0)
+        // These define the "design" dimensions before DPI scaling
+        // ====================================================================
+
+        // Font sizes (in points)
+        float baseFontSize = 13.0f;
+        float baseFontSizeSmall = 11.0f;
+        float baseFontSizeLarge = 16.0f;
+
+        // Widget dimensions
+        float baseCornerRadius = 4.0f;
+        float basePadding = 8.0f;
+        float baseSpacing = 4.0f;
+
+        // Panel
+        float basePanelHeaderHeight = 26.0f;
+
+        // Button
+        float baseButtonHeight = 24.0f;
+
+        // Dropdown
+        float baseDropdownItemHeight = 24.0f;
+
+        // Slider
+        float baseSliderHeight = 24.0f;
+        float baseSliderTrackHeight = 4.0f;
+        float baseSliderHandleWidth = 12.0f;
+
+        // Checkbox
+        float baseCheckboxSize = 16.0f;
+
+        // TextField
+        float baseTextFieldHeight = 28.0f;
+
+        // Scrollbar
+        float baseScrollbarWidth = 8.0f;
+        float baseScrollbarMinThumbHeight = 20.0f;
+
+        // Property row
+        float basePropertyLabelWidth = 120.0f;
+        float basePropertyRowHeight = 26.0f;
+
+        // ====================================================================
+        // SCALED GETTERS (Call these when drawing/laying out)
+        // These return actual pixel values after DPI scaling
+        // ====================================================================
+
+        float fontSize() const;
+        float fontSizeSmall() const;
+        float fontSizeLarge() const;
+        float cornerRadius() const;
+        float padding() const;
+        float spacing() const;
+        float panelHeaderHeight() const;
+        float buttonHeight() const;
+        float dropdownItemHeight() const;
+        float sliderHeight() const;
+        float sliderTrackHeight() const;
+        float sliderHandleWidth() const;
+        float checkboxSize() const;
+        float textFieldHeight() const;
+        float scrollbarWidth() const;
+        float scrollbarMinThumbHeight() const;
+        float propertyLabelWidth() const;
+        float propertyRowHeight() const;
+
+        // ====================================================================
+        // COLORS (Not scaled - colors don't change with DPI)
+        // ====================================================================
+
         // Background colors
         Color background{ 0.22f, 0.22f, 0.22f, 1.0f };
         Color backgroundDark{ 0.18f, 0.18f, 0.18f, 1.0f };
@@ -21,53 +102,35 @@ namespace libre::ui {
         // Border
         Color border{ 0.1f, 0.1f, 0.1f, 1.0f };
 
-        // Widget settings
-        float cornerRadius = 4.0f;
-        float padding = 8.0f;
-        float spacing = 4.0f;
-
         // Panel
-        float panelHeaderHeight = 26.0f;
         Color panelHeader{ 0.25f, 0.25f, 0.25f, 1.0f };
         Color panelHeaderHover{ 0.3f, 0.3f, 0.3f, 1.0f };
 
         // Button
-        float buttonHeight = 24.0f;
         Color buttonBackground{ 0.3f, 0.3f, 0.3f, 1.0f };
         Color buttonHover{ 0.35f, 0.35f, 0.35f, 1.0f };
         Color buttonPressed{ 0.25f, 0.25f, 0.25f, 1.0f };
 
         // Dropdown
-        float dropdownItemHeight = 24.0f;
         Color dropdownBackground{ 0.2f, 0.2f, 0.2f, 1.0f };
         Color dropdownItemHover{ 0.3f, 0.3f, 0.3f, 1.0f };
 
-        // Font
-        float fontSize = 13.0f;
-               
         // Slider
-        float sliderHeight = 24.0f;
-        float sliderTrackHeight = 4.0f;
-        float sliderHandleWidth = 12.0f;
         Color sliderTrack{ 0.15f, 0.15f, 0.15f, 1.0f };
-        Color sliderFill{ 0.3f, 0.5f, 0.8f, 1.0f };  // Same as accent
+        Color sliderFill{ 0.3f, 0.5f, 0.8f, 1.0f };
 
         // Checkbox
-        float checkboxSize = 16.0f;
         Color checkboxBackground{ 0.2f, 0.2f, 0.2f, 1.0f };
-        Color checkboxCheck{ 0.3f, 0.5f, 0.8f, 1.0f };  // Same as accent
+        Color checkboxCheck{ 0.3f, 0.5f, 0.8f, 1.0f };
 
         // TextField
-        float textFieldHeight = 28.0f;
         Color textFieldBackground{ 0.18f, 0.18f, 0.18f, 1.0f };
         Color textFieldBorder{ 0.3f, 0.3f, 0.3f, 1.0f };
-        Color textFieldFocusBorder{ 0.3f, 0.5f, 0.8f, 1.0f };  // Same as accent
+        Color textFieldFocusBorder{ 0.3f, 0.5f, 0.8f, 1.0f };
         Color textFieldPlaceholder{ 0.5f, 0.5f, 0.5f, 1.0f };
         Color textFieldCursor{ 0.9f, 0.9f, 0.9f, 1.0f };
 
         // Scrollbar
-        float scrollbarWidth = 8.0f;
-        float scrollbarMinThumbHeight = 20.0f;
         Color scrollbarTrack{ 0.15f, 0.15f, 0.15f, 1.0f };
         Color scrollbarThumb{ 0.35f, 0.35f, 0.35f, 1.0f };
         Color scrollbarThumbHover{ 0.45f, 0.45f, 0.45f, 1.0f };
@@ -75,19 +138,12 @@ namespace libre::ui {
         // Separator
         Color separatorColor{ 0.25f, 0.25f, 0.25f, 1.0f };
 
-        // Property row
-        float propertyLabelWidth = 120.0f;
-        float propertyRowHeight = 26.0f;
-
         // Section header
         Color sectionHeaderBackground{ 0.2f, 0.2f, 0.2f, 1.0f };
         Color sectionHeaderHover{ 0.25f, 0.25f, 0.25f, 1.0f };
     };
 
     // Global theme access
-    inline Theme& GetTheme() {
-        static Theme theme;
-        return theme;
-    }
+    Theme& GetTheme();
 
 } // namespace libre::ui

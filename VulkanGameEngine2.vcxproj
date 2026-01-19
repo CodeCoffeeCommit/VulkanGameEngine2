@@ -152,6 +152,7 @@ glfw3dll.lib;freetype.lib
     <ClCompile Include="src\ui\UI.cpp" />
     <ClCompile Include="src\ui\Widgets.cpp" />
     <ClCompile Include="src\world\World.cpp" />
+    <ClCompile Include="Theme.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ShaderCompiler.h" />
@@ -179,6 +180,7 @@ glfw3dll.lib;freetype.lib
     <ClInclude Include="src\ui\UIRenderer.h" />
     <ClInclude Include="src\ui\Theme.h" />
     <ClInclude Include="src\ui\UI.h" />
+    <ClInclude Include="src\ui\UIScale.h" />
     <ClInclude Include="src\ui\Widgets.h" />
     <ClInclude Include="src\world\ComponentStorage.h" />
     <ClInclude Include="src\world\Primitives.h" />

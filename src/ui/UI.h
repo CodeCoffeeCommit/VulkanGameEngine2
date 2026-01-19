@@ -5,6 +5,7 @@
 #include "Theme.h"
 #include "UIRenderer.h"
 #include "Widgets.h"
+#include <GLFW/glfw3.h>
 #include <memory>
 #include <vector>
 
@@ -14,7 +15,8 @@ namespace libre::ui {
 
     class UIManager {
     public:
-        void init(VulkanContext* context, VkRenderPass renderPass);
+        // Initialize UI system - now requires window handle for DPI detection
+        void init(VulkanContext* context, VkRenderPass renderPass, GLFWwindow* window);
         void cleanup();
 
         // Add root-level widgets
@@ -45,9 +47,11 @@ namespace libre::ui {
         UIRenderer& getRenderer() { return renderer_; }
         float getScreenWidth() const { return screenWidth_; }
         float getScreenHeight() const { return screenHeight_; }
+        GLFWwindow* getWindow() const { return window_; }
 
     private:
         UIRenderer renderer_;
+        GLFWwindow* window_ = nullptr;
 
         // Menu bar (top of screen)
         std::unique_ptr<MenuBar> menuBar_;

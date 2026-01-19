@@ -1,3 +1,4 @@
+// src/ui/PreferencesWindow.h
 #pragma once
 
 #include "Widgets.h"
@@ -97,16 +98,9 @@ namespace libre::ui {
         // WIDGET DRAWING HELPERS
         // ========================================================================
 
-        // Helper to draw a section header
         void drawSectionHeader(UIRenderer& renderer, float& y, const std::string& title);
-
-        // Helper to draw a horizontal separator
         void drawSeparator(UIRenderer& renderer, float& y);
-
-        // Draws a property row and returns the control bounds for interaction tracking
         Rect drawPropertyRow(UIRenderer& renderer, float& y, const std::string& label);
-
-        // Widget drawing helpers (return bounds for hit testing)
         Rect drawCheckbox(UIRenderer& renderer, const Rect& bounds, bool checked, bool hovered = false);
         Rect drawSlider(UIRenderer& renderer, const Rect& bounds, float value, float minVal, float maxVal,
             const std::string& valueFormat = "%.1f", bool hovered = false);
@@ -116,6 +110,12 @@ namespace libre::ui {
             const std::string& format = "%.0f");
         Rect drawDropdown(UIRenderer& renderer, const Rect& bounds, const std::vector<std::string>& items,
             int selectedIndex, bool open = false);
+
+        // ========================================================================
+        // INPUT HANDLING HELPERS
+        // ========================================================================
+
+        void handleCheckboxClick(int widgetId);
 
         // ========================================================================
         // STATE
@@ -158,7 +158,7 @@ namespace libre::ui {
         };
         std::vector<WidgetHitArea> hitAreas_;
         int hoveredWidgetId_ = -1;
-        int activeWidgetId_ = -1;  // For dragging sliders, focused text fields
+        int activeWidgetId_ = -1;
         float sliderDragStartValue_ = 0.0f;
 
         // Constants

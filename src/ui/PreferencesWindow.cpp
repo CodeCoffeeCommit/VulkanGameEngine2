@@ -1,25 +1,30 @@
-#include "PreferencesWindow.h"
-#include "Theme.h"
-#include <algorithm>
-#include <cstdio>
+// src/ui/PreferencesWindow.cpp
+// Updated to use scaled theme getters instead of direct member access
 
-namespace {
-    // Helper function to avoid std::clamp compatibility issues
-    template<typename T>
-    T clampVal(T value, T minVal, T maxVal) {
-        if (value < minVal) return minVal;
-        if (value > maxVal) return maxVal;
-        return value;
-    }
-}
+#include "PreferencesWindow.h"
+#include <cstdio>
+#include <algorithm>
+#include <iostream>
 
 namespace libre::ui {
 
+    // Helper function for clamping
+    template<typename T>
+    T clampVal(T val, T minV, T maxV) {
+        return std::max(minV, std::min(maxV, val));
+    }
+
     // ============================================================================
-    // CONSTRUCTOR
+    // CONSTRUCTION
     // ============================================================================
 
     PreferencesWindow::PreferencesWindow() : Window("Preferences") {
+        bounds = { 100, 100, 600, 500 };
+        closable = true;
+        draggable = true;
+        isOpen = false;
+
+        // Initialize tab buttons
         tabButtons_ = {
             { "General",     PreferencesTab::General,     {}, false },
             { "Interface",   PreferencesTab::Interface,   {}, false },
@@ -29,14 +34,10 @@ namespace libre::ui {
             { "Credits",     PreferencesTab::Credits,     {}, false }
         };
 
-        for (const auto& btn : tabButtons_) {
-            scrollOffsets_[btn.tab] = 0.0f;
+        // Initialize scroll offsets for each tab
+        for (int i = 0; i < 6; i++) {
+            scrollOffsets_[static_cast<PreferencesTab>(i)] = 0.0f;
         }
-
-        bounds = { 100, 100, 620, 480 };
-        closable = true;
-        draggable = true;
-        isOpen = false;
     }
 
     // ============================================================================
@@ -45,31 +46,49 @@ namespace libre::ui {
 
     void PreferencesWindow::layout(const Rect& available) {
         Window::layout(available);
+
         auto& theme = GetTheme();
 
-        float contentTop = bounds.y + theme.panelHeaderHeight;
-        float contentHeight = bounds.h - theme.panelHeaderHeight;
+        // Sidebar on the left
+        sidebarBounds_ = {
+            contentBounds_.x,
+            contentBounds_.y,
+            SIDEBAR_WIDTH,
+            contentBounds_.h
+        };
 
-        sidebarBounds_ = { bounds.x, contentTop, SIDEBAR_WIDTH, contentHeight };
-        contentBounds_ = { bounds.x + SIDEBAR_WIDTH, contentTop,
-                          bounds.w - SIDEBAR_WIDTH, contentHeight };
+        // Content area takes the rest
+        contentBounds_ = {
+            contentBounds_.x + SIDEBAR_WIDTH,
+            contentBounds_.y,
+            bounds.w - SIDEBAR_WIDTH,
+            contentBounds_.h
+        };
 
-        float y = sidebarBounds_.y + theme.padding;
+        // Layout tab buttons
+        float y = sidebarBounds_.y + theme.padding();
         for (auto& btn : tabButtons_) {
-            btn.bounds = { sidebarBounds_.x + theme.padding, y,
-                          SIDEBAR_WIDTH - theme.padding * 2, theme.buttonHeight };
-            y += theme.buttonHeight + theme.spacing;
+            btn.bounds = {
+                sidebarBounds_.x + theme.padding(),
+                y,
+                SIDEBAR_WIDTH - theme.padding() * 2,
+                ROW_HEIGHT
+            };
+            y += ROW_HEIGHT + 2;
         }
     }
 
     // ============================================================================
-    // MAIN DRAW
+    // DRAWING
     // ============================================================================
 
     void PreferencesWindow::draw(UIRenderer& renderer) {
         if (!isOpen) return;
+
         Window::draw(renderer);
+
         hitAreas_.clear();
+
         drawSidebar(renderer);
         drawContent(renderer);
     }
@@ -81,30 +100,33 @@ namespace libre::ui {
     void PreferencesWindow::drawSidebar(UIRenderer& renderer) {
         auto& theme = GetTheme();
 
+        // Sidebar background
         renderer.drawRect(sidebarBounds_, theme.backgroundDark);
-        renderer.drawRect({ sidebarBounds_.right() - 1, sidebarBounds_.y, 1, sidebarBounds_.h },
-            theme.border);
 
-        for (const auto& btn : tabButtons_) {
-            bool isActive = (btn.tab == currentTab_);
+        // Vertical separator line
+        renderer.drawRect({
+            sidebarBounds_.right() - 1,
+            sidebarBounds_.y,
+            1,
+            sidebarBounds_.h
+            }, theme.border);
 
-            Color bgColor;
-            if (isActive) {
+        // Tab buttons
+        for (auto& btn : tabButtons_) {
+            Color bgColor = theme.backgroundDark;
+            if (btn.tab == currentTab_) {
                 bgColor = theme.accent;
             }
             else if (btn.hovered) {
                 bgColor = theme.buttonHover;
             }
-            else {
-                bgColor = theme.buttonBackground;
-            }
 
-            renderer.drawRoundedRect(btn.bounds, bgColor, theme.cornerRadius);
+            renderer.drawRoundedRect(btn.bounds, bgColor, theme.cornerRadius());
 
-            Vec2 textSize = renderer.measureText(btn.label, theme.fontSize);
+            Vec2 textSize = renderer.measureText(btn.label, theme.fontSize());
             float textX = btn.bounds.x + (btn.bounds.w - textSize.x) / 2;
             float textY = btn.bounds.y + (btn.bounds.h - textSize.y) / 2;
-            renderer.drawText(btn.label, textX, textY, theme.text, theme.fontSize);
+            renderer.drawText(btn.label, textX, textY, theme.text, theme.fontSize());
         }
     }
 
@@ -132,9 +154,14 @@ namespace libre::ui {
         float maxScroll = contentHeight_ - contentBounds_.h;
         if (maxScroll < 0) maxScroll = 0;
 
+        // Draw scrollbar if needed
         if (maxScroll > 0) {
-            Rect scrollTrack = { contentBounds_.right() - SCROLLBAR_WIDTH - 2,
-                                contentBounds_.y + 2, SCROLLBAR_WIDTH, contentBounds_.h - 4 };
+            Rect scrollTrack = {
+                contentBounds_.right() - SCROLLBAR_WIDTH - 2,
+                contentBounds_.y + 2,
+                SCROLLBAR_WIDTH,
+                contentBounds_.h - 4
+            };
             renderer.drawRoundedRect(scrollTrack, theme.backgroundDark, SCROLLBAR_WIDTH / 2);
 
             float thumbHeight = (contentBounds_.h / contentHeight_) * scrollTrack.h;
@@ -143,7 +170,7 @@ namespace libre::ui {
 
             scrollbarThumbBounds_ = { scrollTrack.x, thumbY, scrollTrack.w, thumbHeight };
 
-            Color thumbColor = scrollbarDragging_ ? theme.accent : theme.buttonHover;
+            Color thumbColor = scrollbarDragging_ ? theme.accent : theme.scrollbarThumb;
             renderer.drawRoundedRect(scrollbarThumbBounds_, thumbColor, SCROLLBAR_WIDTH / 2);
         }
 
@@ -159,8 +186,8 @@ namespace libre::ui {
         float scrollY = y - currentScrollOffset_;
 
         if (scrollY + 30 > contentBounds_.y && scrollY < contentBounds_.bottom()) {
-            renderer.drawText(title, contentBounds_.x + theme.padding, scrollY,
-                theme.accent, theme.fontSize + 2);
+            renderer.drawText(title, contentBounds_.x + theme.padding(), scrollY,
+                theme.accent, theme.fontSize() + 2);
         }
         y += 30;
     }
@@ -171,9 +198,12 @@ namespace libre::ui {
         float scrollY = y - currentScrollOffset_;
 
         if (scrollY > contentBounds_.y && scrollY < contentBounds_.bottom()) {
-            renderer.drawRect({ contentBounds_.x + theme.padding, scrollY,
-                              contentBounds_.w - theme.padding * 2 - SCROLLBAR_WIDTH - 4, 1 },
-                theme.border);
+            renderer.drawRect({
+                contentBounds_.x + theme.padding(),
+                scrollY,
+                contentBounds_.w - theme.padding() * 2 - SCROLLBAR_WIDTH - 4,
+                1
+                }, theme.border);
         }
         y += 15;
     }
@@ -181,25 +211,33 @@ namespace libre::ui {
     Rect PreferencesWindow::drawPropertyRow(UIRenderer& renderer, float& y, const std::string& label) {
         auto& theme = GetTheme();
         float scrollY = y - currentScrollOffset_;
-        float x = contentBounds_.x + theme.padding;
+        float x = contentBounds_.x + theme.padding();
 
-        Rect controlBounds = { x + LABEL_WIDTH, scrollY,
-                              contentBounds_.w - LABEL_WIDTH - theme.padding * 2 - SCROLLBAR_WIDTH - 4,
-                              ROW_HEIGHT };
+        Rect controlBounds = {
+            x + LABEL_WIDTH,
+            scrollY,
+            contentBounds_.w - LABEL_WIDTH - theme.padding() * 2 - SCROLLBAR_WIDTH - 4,
+            ROW_HEIGHT
+        };
 
         if (scrollY + ROW_HEIGHT > contentBounds_.y && scrollY < contentBounds_.bottom()) {
-            renderer.drawText(label, x, scrollY + (ROW_HEIGHT - theme.fontSize) / 2,
-                theme.text, theme.fontSize);
+            renderer.drawText(label, x, scrollY + (ROW_HEIGHT - theme.fontSize()) / 2,
+                theme.text, theme.fontSize());
         }
 
-        y += ROW_HEIGHT + theme.spacing;
+        y += ROW_HEIGHT + theme.spacing();
         return controlBounds;
     }
 
     Rect PreferencesWindow::drawCheckbox(UIRenderer& renderer, const Rect& bounds, bool checked, bool hovered) {
         auto& theme = GetTheme();
 
-        Rect box = { bounds.x, bounds.y + (bounds.h - CHECKBOX_SIZE) / 2, CHECKBOX_SIZE, CHECKBOX_SIZE };
+        Rect box = {
+            bounds.x,
+            bounds.y + (bounds.h - CHECKBOX_SIZE) / 2,
+            CHECKBOX_SIZE,
+            CHECKBOX_SIZE
+        };
 
         if (box.bottom() > contentBounds_.y && box.y < contentBounds_.bottom()) {
             Color boxBg = hovered ? theme.buttonHover : theme.buttonBackground;
@@ -220,10 +258,15 @@ namespace libre::ui {
         auto& theme = GetTheme();
 
         float valueDisplayWidth = 50.0f;
-        float trackWidth = bounds.w - valueDisplayWidth - theme.padding;
+        float trackWidth = bounds.w - valueDisplayWidth - theme.padding();
 
         float trackH = 4.0f;
-        Rect track = { bounds.x, bounds.y + (bounds.h - trackH) / 2, trackWidth, trackH };
+        Rect track = {
+            bounds.x,
+            bounds.y + (bounds.h - trackH) / 2,
+            trackWidth,
+            trackH
+        };
 
         if (track.bottom() > contentBounds_.y && track.y < contentBounds_.bottom()) {
             renderer.drawRoundedRect(track, theme.backgroundDark, trackH / 2);
@@ -243,9 +286,9 @@ namespace libre::ui {
 
             char buf[32];
             snprintf(buf, sizeof(buf), valueFormat.c_str(), value);
-            renderer.drawText(buf, track.right() + theme.padding,
-                bounds.y + (bounds.h - theme.fontSize) / 2,
-                theme.textDim, theme.fontSize);
+            renderer.drawText(buf, track.right() + theme.padding(),
+                bounds.y + (bounds.h - theme.fontSize()) / 2,
+                theme.textDim, theme.fontSize());
         }
 
         return track;
@@ -257,7 +300,7 @@ namespace libre::ui {
 
         if (bounds.bottom() > contentBounds_.y && bounds.y < contentBounds_.bottom()) {
             Color bgColor = focused ? theme.backgroundLight : theme.buttonBackground;
-            renderer.drawRoundedRect(bounds, bgColor, theme.cornerRadius);
+            renderer.drawRoundedRect(bounds, bgColor, theme.cornerRadius());
 
             Color borderColor = focused ? theme.accent : theme.border;
             renderer.drawRectOutline(bounds, borderColor);
@@ -265,9 +308,9 @@ namespace libre::ui {
             std::string displayText = text.empty() ? placeholder : text;
             Color textColor = text.empty() ? theme.textDim : theme.text;
 
-            renderer.drawText(displayText, bounds.x + theme.padding,
-                bounds.y + (bounds.h - theme.fontSize) / 2,
-                textColor, theme.fontSize);
+            renderer.drawText(displayText, bounds.x + theme.padding(),
+                bounds.y + (bounds.h - theme.fontSize()) / 2,
+                textColor, theme.fontSize());
         }
 
         return bounds;
@@ -279,14 +322,14 @@ namespace libre::ui {
 
         if (bounds.bottom() > contentBounds_.y && bounds.y < contentBounds_.bottom()) {
             Rect fieldBounds = { bounds.x, bounds.y, bounds.w, bounds.h };
-            renderer.drawRoundedRect(fieldBounds, theme.buttonBackground, theme.cornerRadius);
+            renderer.drawRoundedRect(fieldBounds, theme.buttonBackground, theme.cornerRadius());
             renderer.drawRectOutline(fieldBounds, theme.border);
 
             char buf[32];
             snprintf(buf, sizeof(buf), format.c_str(), value);
-            renderer.drawText(buf, bounds.x + theme.padding,
-                bounds.y + (bounds.h - theme.fontSize) / 2,
-                theme.text, theme.fontSize);
+            renderer.drawText(buf, bounds.x + theme.padding(),
+                bounds.y + (bounds.h - theme.fontSize()) / 2,
+                theme.text, theme.fontSize());
         }
 
         return bounds;
@@ -297,18 +340,18 @@ namespace libre::ui {
         auto& theme = GetTheme();
 
         if (bounds.bottom() > contentBounds_.y && bounds.y < contentBounds_.bottom()) {
-            renderer.drawRoundedRect(bounds, theme.buttonBackground, theme.cornerRadius);
+            renderer.drawRoundedRect(bounds, theme.buttonBackground, theme.cornerRadius());
             renderer.drawRectOutline(bounds, theme.border);
 
             std::string text = (selectedIndex >= 0 && selectedIndex < static_cast<int>(items.size()))
                 ? items[selectedIndex] : "";
-            renderer.drawText(text, bounds.x + theme.padding,
-                bounds.y + (bounds.h - theme.fontSize) / 2,
-                theme.text, theme.fontSize);
+            renderer.drawText(text, bounds.x + theme.padding(),
+                bounds.y + (bounds.h - theme.fontSize()) / 2,
+                theme.text, theme.fontSize());
 
             renderer.drawText("v", bounds.right() - 16,
-                bounds.y + (bounds.h - theme.fontSize) / 2,
-                theme.textDim, theme.fontSize);
+                bounds.y + (bounds.h - theme.fontSize()) / 2,
+                theme.textDim, theme.fontSize());
         }
 
         return bounds;
@@ -320,7 +363,7 @@ namespace libre::ui {
 
     void PreferencesWindow::drawGeneralTab(UIRenderer& renderer) {
         auto& theme = GetTheme();
-        float y = contentBounds_.y + theme.padding;
+        float y = contentBounds_.y + theme.padding();
         int widgetId = 0;
 
         drawSectionHeader(renderer, y, "Project Settings");
@@ -348,7 +391,7 @@ namespace libre::ui {
             hitAreas_.push_back({ controlBounds, widgetId++, WidgetHitArea::Type::TextField });
         }
 
-        contentHeight_ = y - contentBounds_.y + theme.padding;
+        contentHeight_ = y - contentBounds_.y + theme.padding();
     }
 
     // ============================================================================
@@ -357,7 +400,7 @@ namespace libre::ui {
 
     void PreferencesWindow::drawInterfaceTab(UIRenderer& renderer) {
         auto& theme = GetTheme();
-        float y = contentBounds_.y + theme.padding;
+        float y = contentBounds_.y + theme.padding();
         int widgetId = 100;
 
         drawSectionHeader(renderer, y, "Appearance");
@@ -394,7 +437,7 @@ namespace libre::ui {
             hitAreas_.push_back({ checkboxBounds, widgetId++, WidgetHitArea::Type::Checkbox });
         }
 
-        contentHeight_ = y - contentBounds_.y + theme.padding;
+        contentHeight_ = y - contentBounds_.y + theme.padding();
     }
 
     // ============================================================================
@@ -403,7 +446,7 @@ namespace libre::ui {
 
     void PreferencesWindow::drawViewportTab(UIRenderer& renderer) {
         auto& theme = GetTheme();
-        float y = contentBounds_.y + theme.padding;
+        float y = contentBounds_.y + theme.padding();
         int widgetId = 200;
 
         drawSectionHeader(renderer, y, "Camera");
@@ -453,7 +496,7 @@ namespace libre::ui {
             hitAreas_.push_back({ checkboxBounds, widgetId++, WidgetHitArea::Type::Checkbox });
         }
 
-        contentHeight_ = y - contentBounds_.y + theme.padding;
+        contentHeight_ = y - contentBounds_.y + theme.padding();
     }
 
     // ============================================================================
@@ -462,7 +505,7 @@ namespace libre::ui {
 
     void PreferencesWindow::drawInputTab(UIRenderer& renderer) {
         auto& theme = GetTheme();
-        float y = contentBounds_.y + theme.padding;
+        float y = contentBounds_.y + theme.padding();
         int widgetId = 300;
 
         drawSectionHeader(renderer, y, "Mouse");
@@ -505,7 +548,7 @@ namespace libre::ui {
             hitAreas_.push_back({ checkboxBounds, widgetId++, WidgetHitArea::Type::Checkbox });
         }
 
-        contentHeight_ = y - contentBounds_.y + theme.padding;
+        contentHeight_ = y - contentBounds_.y + theme.padding();
     }
 
     // ============================================================================
@@ -514,7 +557,7 @@ namespace libre::ui {
 
     void PreferencesWindow::drawPerformanceTab(UIRenderer& renderer) {
         auto& theme = GetTheme();
-        float y = contentBounds_.y + theme.padding;
+        float y = contentBounds_.y + theme.padding();
         int widgetId = 400;
 
         drawSectionHeader(renderer, y, "Memory");
@@ -527,7 +570,7 @@ namespace libre::ui {
         }
 
         drawSeparator(renderer, y);
-        drawSectionHeader(renderer, y, "GPU");
+        drawSectionHeader(renderer, y, "Rendering");
 
         {
             Rect controlBounds = drawPropertyRow(renderer, y, "GPU Compute");
@@ -544,7 +587,7 @@ namespace libre::ui {
             hitAreas_.push_back({ dropBounds, widgetId++, WidgetHitArea::Type::Dropdown });
         }
 
-        contentHeight_ = y - contentBounds_.y + theme.padding;
+        contentHeight_ = y - contentBounds_.y + theme.padding();
     }
 
     // ============================================================================
@@ -553,38 +596,40 @@ namespace libre::ui {
 
     void PreferencesWindow::drawCreditsTab(UIRenderer& renderer) {
         auto& theme = GetTheme();
-        float x = contentBounds_.x + theme.padding;
-        float y = contentBounds_.y + theme.padding;
-        float lineHeight = theme.fontSize + 6;
+        float y = contentBounds_.y + theme.padding();
+        float x = contentBounds_.x + theme.padding();
 
-        auto drawLine = [&](const std::string& text, const Color& color, float size = 0) {
+        auto drawLine = [&](const std::string& text, const Color& color) {
             float scrollY = y - currentScrollOffset_;
-            if (scrollY + lineHeight > contentBounds_.y && scrollY < contentBounds_.bottom()) {
-                renderer.drawText(text, x, scrollY, color, size > 0 ? size : theme.fontSize);
+            if (scrollY + 20 > contentBounds_.y && scrollY < contentBounds_.bottom()) {
+                renderer.drawText(text, x, scrollY, color, theme.fontSize());
             }
-            y += lineHeight;
+            y += 20;
             };
 
         auto drawLineIndented = [&](const std::string& text, const Color& color) {
             float scrollY = y - currentScrollOffset_;
-            if (scrollY + lineHeight > contentBounds_.y && scrollY < contentBounds_.bottom()) {
-                renderer.drawText(text, x + 15, scrollY, color, theme.fontSize);
+            if (scrollY + 20 > contentBounds_.y && scrollY < contentBounds_.bottom()) {
+                renderer.drawText(text, x + 20, scrollY, color, theme.fontSize());
             }
-            y += lineHeight;
+            y += 20;
             };
 
-        drawLine("Libre DCC Tool", theme.accent, theme.fontSize + 4);
+        drawLine("LIBRE DCC TOOL", theme.accent);
+        drawLine("Version 0.1.0 (Development)", theme.textDim);
         y += 10;
 
-        drawLine("Version 0.1.0 (Development Build)", theme.textDim);
-        y += 10;
-
-        drawLine("A free and open-source digital content creation suite.", theme.text);
+        drawLine("A free, open-source digital content creation suite.", theme.text);
         y += 15;
 
         float scrollY = y - currentScrollOffset_;
         if (scrollY > contentBounds_.y && scrollY < contentBounds_.bottom()) {
-            renderer.drawRect({ x, scrollY, contentBounds_.w - theme.padding * 2 - SCROLLBAR_WIDTH, 1 }, theme.border);
+            renderer.drawRect({
+                x,
+                scrollY,
+                contentBounds_.w - theme.padding() * 2 - SCROLLBAR_WIDTH,
+                1
+                }, theme.border);
         }
         y += 15;
 
@@ -601,7 +646,12 @@ namespace libre::ui {
 
         scrollY = y - currentScrollOffset_;
         if (scrollY > contentBounds_.y && scrollY < contentBounds_.bottom()) {
-            renderer.drawRect({ x, scrollY, contentBounds_.w - theme.padding * 2 - SCROLLBAR_WIDTH, 1 }, theme.border);
+            renderer.drawRect({
+                x,
+                scrollY,
+                contentBounds_.w - theme.padding() * 2 - SCROLLBAR_WIDTH,
+                1
+                }, theme.border);
         }
         y += 15;
 
@@ -613,7 +663,7 @@ namespace libre::ui {
 
         drawLine("github.com/your-repo/libre-dcc", theme.textDim);
 
-        contentHeight_ = y - contentBounds_.y + theme.padding;
+        contentHeight_ = y - contentBounds_.y + theme.padding();
     }
 
     // ============================================================================
@@ -623,10 +673,12 @@ namespace libre::ui {
     bool PreferencesWindow::handleMouse(const MouseEvent& event) {
         if (!isOpen) return false;
 
+        // Let base Window handle title bar, close button, dragging
         if (Window::handleMouse(event)) {
             return true;
         }
 
+        // Handle tab buttons
         for (auto& btn : tabButtons_) {
             btn.hovered = btn.bounds.contains(event.x, event.y);
 
@@ -636,6 +688,7 @@ namespace libre::ui {
             }
         }
 
+        // Handle scrollbar dragging
         if (scrollbarDragging_) {
             if (event.released) {
                 scrollbarDragging_ = false;
@@ -645,45 +698,43 @@ namespace libre::ui {
                 if (maxScroll < 0) maxScroll = 0;
                 if (maxScroll > 0) {
                     float scrollRange = contentBounds_.h - scrollbarThumbBounds_.h;
-                    float newThumbY = event.y - scrollDragStartY_;
-                    float t = (newThumbY - contentBounds_.y) / scrollRange;
-                    scrollOffsets_[currentTab_] = clampVal(t * maxScroll, 0.0f, maxScroll);
+                    float delta = event.y - scrollDragStartY_;
+                    scrollOffsets_[currentTab_] = scrollDragStartOffset_ + (delta / scrollRange) * maxScroll;
+                    scrollOffsets_[currentTab_] = clampVal(scrollOffsets_[currentTab_], 0.0f, maxScroll);
                 }
             }
             return true;
         }
 
+        // Start scrollbar drag
         if (scrollbarThumbBounds_.contains(event.x, event.y) && event.pressed && event.button == MouseButton::Left) {
             scrollbarDragging_ = true;
-            scrollDragStartY_ = event.y - scrollbarThumbBounds_.y + contentBounds_.y;
+            scrollDragStartY_ = event.y;
             scrollDragStartOffset_ = scrollOffsets_[currentTab_];
             return true;
         }
 
+        // Handle scroll wheel
         if (contentBounds_.contains(event.x, event.y) && event.scroll != 0) {
             float maxScroll = contentHeight_ - contentBounds_.h;
-            if (maxScroll < 0) maxScroll = 0;
-            scrollOffsets_[currentTab_] -= event.scroll * 30.0f;
-            scrollOffsets_[currentTab_] = clampVal(scrollOffsets_[currentTab_], 0.0f, maxScroll);
+            if (maxScroll > 0) {
+                scrollOffsets_[currentTab_] -= event.scroll * 30.0f;
+                scrollOffsets_[currentTab_] = clampVal(scrollOffsets_[currentTab_], 0.0f, maxScroll);
+            }
             return true;
         }
 
+        // Update hovered widget
         hoveredWidgetId_ = -1;
-        for (const auto& hit : hitAreas_) {
-            if (hit.bounds.contains(event.x, event.y)) {
-                hoveredWidgetId_ = hit.id;
+        for (auto& area : hitAreas_) {
+            if (area.bounds.contains(event.x, event.y)) {
+                hoveredWidgetId_ = area.id;
 
+                // Handle clicks on widgets
                 if (event.pressed && event.button == MouseButton::Left) {
-                    if (hit.type == WidgetHitArea::Type::Checkbox) {
-                        if (hit.id == 0) settings_.autoSave = !settings_.autoSave;
-                        else if (hit.id == 102) settings_.showTooltips = !settings_.showTooltips;
-                        else if (hit.id == 103) settings_.animateUI = !settings_.animateUI;
-                        else if (hit.id == 203) settings_.vsync = !settings_.vsync;
-                        else if (hit.id == 204) settings_.showGrid = !settings_.showGrid;
-                        else if (hit.id == 205) settings_.showAxes = !settings_.showAxes;
-                        else if (hit.id == 303) settings_.invertY = !settings_.invertY;
-                        else if (hit.id == 304) settings_.invertZoom = !settings_.invertZoom;
-                        else if (hit.id == 401) settings_.useGPUCompute = !settings_.useGPUCompute;
+                    if (area.type == WidgetHitArea::Type::Checkbox) {
+                        // Toggle the appropriate checkbox based on widget ID
+                        handleCheckboxClick(area.id);
                         return true;
                     }
                 }
@@ -694,8 +745,36 @@ namespace libre::ui {
         return bounds.contains(event.x, event.y);
     }
 
+    void PreferencesWindow::handleCheckboxClick(int widgetId) {
+        // General tab (0-99)
+        if (widgetId == 0) settings_.autoSave = !settings_.autoSave;
+
+        // Interface tab (100-199)
+        else if (widgetId == 102) settings_.showTooltips = !settings_.showTooltips;
+        else if (widgetId == 103) settings_.animateUI = !settings_.animateUI;
+
+        // Viewport tab (200-299)
+        else if (widgetId == 203) settings_.vsync = !settings_.vsync;
+        else if (widgetId == 204) settings_.showGrid = !settings_.showGrid;
+        else if (widgetId == 205) settings_.showAxes = !settings_.showAxes;
+
+        // Input tab (300-399)
+        else if (widgetId == 303) settings_.invertY = !settings_.invertY;
+        else if (widgetId == 304) settings_.invertZoom = !settings_.invertZoom;
+
+        // Performance tab (400-499)
+        else if (widgetId == 401) settings_.useGPUCompute = !settings_.useGPUCompute;
+    }
+
     bool PreferencesWindow::handleKey(const KeyEvent& event) {
         if (!isOpen) return false;
+
+        // Escape closes window
+        if (event.pressed && event.key == 256) {  // GLFW_KEY_ESCAPE
+            isOpen = false;
+            return true;
+        }
+
         return false;
     }
 
