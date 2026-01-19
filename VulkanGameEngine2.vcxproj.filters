@@ -69,9 +69,6 @@
     <ClCompile Include="src\core\Inputmanager.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="src\core\Window.cpp">
-      <Filter>Source Files\core</Filter>
-    </ClCompile>
     <ClCompile Include="src\render\GraphicsPipeline.cpp">
       <Filter>Source Files\render</Filter>
     </ClCompile>
@@ -120,11 +117,8 @@
     <ClCompile Include="src\ui\Theme.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
-    <ClCompile Include="CallBackData.h">
-      <Filter>Header Files\ui</Filter>
-    </ClCompile>
-    <ClCompile Include="Window.cpp">
-      <Filter>Source Files\ui</Filter>
+    <ClCompile Include="src\core\Window.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -132,9 +126,6 @@
       <Filter>Header Files\Components</Filter>
     </ClInclude>
     <ClInclude Include="src\core\Application.h">
-      <Filter>Header Files\core</Filter>
-    </ClInclude>
-    <ClInclude Include="src\core\CallbackData.h">
       <Filter>Header Files\core</Filter>
     </ClInclude>
     <ClInclude Include="src\core\Camera.h">
@@ -153,9 +144,6 @@
       <Filter>Header Files\core</Filter>
     </ClInclude>
     <ClInclude Include="src\core\Selection.h">
-      <Filter>Header Files\core</Filter>
-    </ClInclude>
-    <ClInclude Include="src\core\Window.h">
       <Filter>Header Files\core</Filter>
     </ClInclude>
     <ClInclude Include="src\render\GraphicsPipeline.h">
@@ -224,8 +212,11 @@
     <ClInclude Include="src\ui\Theme.h">
       <Filter>Header Files\ui</Filter>
     </ClInclude>
-    <ClInclude Include="Window.h">
-      <Filter>Header Files\ui</Filter>
+    <ClInclude Include="src\core\CallBackData.h">
+      <Filter>Header Files\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\Window.h">
+      <Filter>Header Files\core</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

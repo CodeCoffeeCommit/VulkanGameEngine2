@@ -130,7 +130,6 @@ glfw3dll.lib;freetype.lib
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="CallBackData.h" />
     <ClCompile Include="ShaderCompiler.cpp" />
     <ClCompile Include="src\core\Application.cpp" />
     <ClCompile Include="src\core\Camera.cpp" />
@@ -154,13 +153,12 @@ glfw3dll.lib;freetype.lib
     <ClCompile Include="src\ui\UI.cpp" />
     <ClCompile Include="src\ui\Widgets.cpp" />
     <ClCompile Include="src\world\World.cpp" />
-    <ClCompile Include="Window.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ShaderCompiler.h" />
     <ClInclude Include="src\components\CoreComponents.h" />
     <ClInclude Include="src\core\Application.h" />
-    <ClInclude Include="src\core\CallbackData.h" />
+    <ClInclude Include="src\core\CallBackData.h" />
     <ClInclude Include="src\core\Camera.h" />
     <ClInclude Include="src\core\Command.h" />
     <ClInclude Include="src\core\Editor.h" />
@@ -189,7 +187,6 @@ glfw3dll.lib;freetype.lib
     <ClInclude Include="src\world\RelationshipStore.h" />
     <ClInclude Include="src\world\Types.h" />
     <ClInclude Include="src\world\World.h" />
-    <ClInclude Include="Window.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
