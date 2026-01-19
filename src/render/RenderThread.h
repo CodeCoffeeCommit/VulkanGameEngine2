@@ -2,6 +2,10 @@
 
 #pragma once
 
+// CRITICAL: Include Vulkan BEFORE other headers for VkRenderPass type
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -58,6 +62,18 @@ namespace libre {
         }
 
         // ========================================================================
+        // VULKAN ACCESS (for UI initialization)
+        // These provide read-only access to Vulkan objects for UI setup
+        // ========================================================================
+
+        VulkanContext* getVulkanContext() const { return vulkanContext_.get(); }
+        SwapChain* getSwapChain() const { return swapChain_.get(); }
+        Renderer* getRenderer() const { return renderer_.get(); }
+
+        // Get render pass for UI pipeline creation
+        VkRenderPass getRenderPass() const;
+
+        // ========================================================================
         // RESOURCE MANAGEMENT
         // ========================================================================
 
@@ -77,6 +93,9 @@ namespace libre {
             return lastCompletedFrame_.load(std::memory_order_acquire);
         }
         float getCurrentFPS() const { return currentFPS_.load(std::memory_order_relaxed); }
+
+        // Get window handle (needed for swapchain recreate)
+        Window* getWindow() const { return window_; }
 
     private:
         // ========================================================================
@@ -136,7 +155,7 @@ namespace libre {
         // ========================================================================
 
         std::function<void(void*)> uiRenderCallback_;
-        std::mutex callbackMutex_;
+        mutable std::mutex callbackMutex_;
 
         // ========================================================================
         // STATISTICS

@@ -26,7 +26,6 @@ namespace libre {
 
 namespace libre::ui {
     class UIManager;
-    class Window;
 }
 
 class Application {
@@ -56,33 +55,29 @@ private:
     // Update game/editor state
     void update(float deltaTime);
 
+    // Update transform hierarchy
+    void updateTransforms();
+
     // Prepare frame data for render thread
     libre::FrameData prepareFrameData();
 
     // ========================================================================
-    // RESIZE HANDLING
+    // SELECTION
     // ========================================================================
-    void handleResizeComplete();
-    bool isMinimized() const;
-
-    // ========================================================================
-    // SCENE MANAGEMENT
-    // ========================================================================
-    void updateTransforms();
-    void syncECSToRenderer();
     void handleSelection();
 
     // ========================================================================
-    // UI
+    // RESIZE HANDLING
     // ========================================================================
-    void openPreferencesWindow();
+    bool isMinimized() const;
 
     // ========================================================================
-    // CORE COMPONENTS (Owned by Main Thread)
+    // CORE OBJECTS (Main Thread Ownership)
     // ========================================================================
     std::unique_ptr<Window> window;
     std::unique_ptr<InputManager> inputManager;
     std::unique_ptr<Camera> camera;
+    std::unique_ptr<libre::ui::UIManager> uiManager;
 
     // ========================================================================
     // RENDER THREAD (Owns all Vulkan objects)
@@ -90,42 +85,33 @@ private:
     std::unique_ptr<libre::RenderThread> renderThread;
 
     // ========================================================================
-    // UI SYSTEM (Logic on main thread, draw commands to render thread)
+    // RESIZE STATE
     // ========================================================================
-    std::unique_ptr<libre::ui::UIManager> uiManager;
-    libre::ui::Window* preferencesWindow = nullptr;
+    std::atomic<bool> pendingResize{ false };
 
     // ========================================================================
     // TIMING
     // ========================================================================
-    std::chrono::steady_clock::time_point lastFrameTime;
     std::chrono::steady_clock::time_point startTime;
+    std::chrono::steady_clock::time_point lastFrameTime;
     float deltaTime = 0.0f;
     float totalTime = 0.0f;
-    float fps = 0.0f;
     uint64_t frameNumber = 0;
 
     // ========================================================================
     // INPUT STATE
     // ========================================================================
     bool middleMouseDown = false;
+    double lastMouseX = 0.0;
+    double lastMouseY = 0.0;
     bool shiftHeld = false;
     bool ctrlHeld = false;
     bool altHeld = false;
-    double lastMouseX = 0.0;
-    double lastMouseY = 0.0;
-
-    // ========================================================================
-    // RESIZE STATE
-    // ========================================================================
-    std::atomic<bool> pendingResize{ false };
-    uint32_t pendingResizeWidth = 0;
-    uint32_t pendingResizeHeight = 0;
 
     // ========================================================================
     // CONSTANTS
     // ========================================================================
     static constexpr int WINDOW_WIDTH = 1280;
     static constexpr int WINDOW_HEIGHT = 720;
-    static constexpr const char* WINDOW_TITLE = "Libre DCC Tool - 3D Viewport";
+    static constexpr const char* WINDOW_TITLE = "LibreDCC - 3D Viewport";
 };

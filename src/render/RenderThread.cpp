@@ -120,7 +120,7 @@ namespace libre {
 
     void RenderThread::setUIRenderCallback(std::function<void(void* commandBuffer)> callback) {
         std::lock_guard<std::mutex> lock(callbackMutex_);
-        uiRenderCallback_ = callback;
+        uiRenderCallback_ = std::move(callback);
     }
 
     // ============================================================================
@@ -143,6 +143,17 @@ namespace libre {
     }
 
     // ============================================================================
+    // VULKAN ACCESS FOR UI
+    // ============================================================================
+
+    VkRenderPass RenderThread::getRenderPass() const {
+        if (swapChain_) {
+            return swapChain_->getRenderPass();
+        }
+        return VK_NULL_HANDLE;
+    }
+
+    // ============================================================================
     // RESOURCE MANAGEMENT
     // ============================================================================
 
@@ -153,10 +164,12 @@ namespace libre {
     }
 
     void RenderThread::unregisterMesh(MeshHandle handle) {
+        // TODO: Implement mesh unregistration
     }
 
     void RenderThread::updateMeshRegion(MeshHandle handle, uint32_t startVertex,
         uint32_t vertexCount, const void* vertexData) {
+        // TODO: Implement partial mesh updates
     }
 
     // ============================================================================
@@ -249,10 +262,9 @@ namespace libre {
 
             std::cout << "[RenderThread] Vulkan initialized successfully" << std::endl;
             return true;
-
         }
         catch (const std::exception& e) {
-            std::cerr << "[RenderThread] Vulkan initialization failed: " << e.what() << std::endl;
+            std::cerr << "[RenderThread] Vulkan initialization error: " << e.what() << std::endl;
             return false;
         }
     }
@@ -283,104 +295,19 @@ namespace libre {
     }
 
     // ============================================================================
-    // SYNC ECS TO RENDERER (Called on Render Thread)
-    // ============================================================================
-
-    void RenderThread::syncECSToRenderer() {
-        if (!renderer_) return;
-
-        // Access ECS from render thread
-        auto& world = Editor::instance().getWorld();
-
-        world.forEach<MeshComponent>([&](EntityID id, MeshComponent& meshComp) {
-            auto* transform = world.getComponent<TransformComponent>(id);
-            auto* render = world.getComponent<RenderComponent>(id);
-
-            if (!transform) return;
-            if (render && !render->visible) return;
-
-            // Convert MeshVertex to Vertex for the renderer
-            std::vector<Vertex> vulkanVertices;
-            vulkanVertices.reserve(meshComp.vertices.size());
-
-            glm::vec3 baseColor = render ? render->baseColor : glm::vec3(0.8f);
-
-            for (const auto& v : meshComp.vertices) {
-                Vertex vk;
-                vk.position = v.position;
-                vk.normal = v.normal;
-                vk.color = baseColor;
-                vulkanVertices.push_back(vk);
-            }
-
-            // Get or create the GPU mesh
-            Mesh* mesh = renderer_->getOrCreateMesh(
-                id,
-                vulkanVertices.data(),
-                vulkanVertices.size(),
-                meshComp.indices.data(),
-                meshComp.indices.size()
-            );
-
-            if (mesh) {
-                // Check if selected
-                bool isSelected = Editor::instance().isSelected(id);
-                glm::vec3 color = isSelected ? glm::vec3(1.0f, 0.5f, 0.0f) : baseColor;
-
-                renderer_->submitMesh(mesh, transform->worldMatrix, color, isSelected);
-            }
-            });
-    }
-
-    // ============================================================================
-    // RENDER ONE FRAME
-    // ============================================================================
-
-    void RenderThread::renderFrame(const FrameData& frameData) {
-        if (!renderer_ || !swapChain_ || !vulkanContext_) {
-            return;
-        }
-
-        // Create camera and set matrices from FrameData
-        Camera renderCamera;
-        renderCamera.setViewMatrix(frameData.camera.viewMatrix);
-        renderCamera.setProjectionMatrix(frameData.camera.projectionMatrix);
-        renderCamera.setPosition(frameData.camera.position);
-        renderCamera.setAspectRatio(frameData.camera.aspectRatio);
-
-        // Sync meshes from ECS to renderer
-        syncECSToRenderer();
-
-        // Draw frame
-        bool success = renderer_->drawFrame(&renderCamera);
-
-        if (!success) {
-            uint32_t w = currentSwapchainWidth_.load();
-            uint32_t h = currentSwapchainHeight_.load();
-            if (w > 0 && h > 0) {
-                swapchainRecreateRequested_.store(true, std::memory_order_release);
-            }
-        }
-
-        lastCompletedFrame_.store(frameData.frameNumber, std::memory_order_release);
-    }
-
-    // ============================================================================
     // SWAPCHAIN RECREATION
     // ============================================================================
 
     void RenderThread::recreateSwapchain() {
-        uint32_t width = newSwapchainWidth_.load(std::memory_order_acquire);
-        uint32_t height = newSwapchainHeight_.load(std::memory_order_acquire);
+        uint32_t newWidth = newSwapchainWidth_.load(std::memory_order_acquire);
+        uint32_t newHeight = newSwapchainHeight_.load(std::memory_order_acquire);
 
-        if (width == 0 || height == 0) {
-            return;
-        }
-
-        std::cout << "[RenderThread] Recreating swapchain: " << width << "x" << height << std::endl;
+        std::cout << "[RenderThread] Recreating swapchain: " << newWidth << "x" << newHeight << std::endl;
 
         vkDeviceWaitIdle(vulkanContext_->getDevice());
 
+        // SwapChain::recreate only takes GLFWwindow* parameter
+        // It will query the current window size internally
         swapChain_->recreate(window_->getHandle());
 
         VkExtent2D extent = swapChain_->getExtent();
@@ -389,7 +316,75 @@ namespace libre {
 
         renderer_->onSwapChainRecreated(swapChain_.get());
 
-        std::cout << "[RenderThread] Swapchain recreated successfully" << std::endl;
+        std::cout << "[RenderThread] Swapchain recreated: " << extent.width << "x" << extent.height << std::endl;
+    }
+
+    // ============================================================================
+    // RENDER FRAME
+    // ============================================================================
+
+    void RenderThread::renderFrame(const FrameData& frameData) {
+        if (!renderer_ || !swapChain_) return;
+
+        // Clear previous submissions
+        renderer_->clearSubmissions();
+
+        // Sync ECS data to renderer - submit meshes from frame data
+        for (const auto& rm : frameData.meshes) {
+            // Get mesh from the renderer's cache using entity ID
+            auto* mesh = renderer_->getOrCreateMesh(rm.entityId, nullptr, 0, nullptr, 0);
+            if (mesh) {
+                renderer_->submitMesh(mesh, rm.modelMatrix, rm.color, rm.isSelected);
+            }
+        }
+
+        // =========================================================================
+        // CONNECT UI CALLBACK TO RENDERER
+        // This is called during command buffer recording
+        // =========================================================================
+        {
+            std::lock_guard<std::mutex> lock(callbackMutex_);
+            if (uiRenderCallback_) {
+                renderer_->setUIRenderCallback([this](VkCommandBuffer cmd) {
+                    // Get current callback under lock
+                    std::function<void(void*)> callback;
+                    {
+                        std::lock_guard<std::mutex> innerLock(callbackMutex_);
+                        callback = uiRenderCallback_;
+                    }
+                    if (callback) {
+                        callback(static_cast<void*>(cmd));
+                    }
+                    });
+            }
+            else {
+                renderer_->setUIRenderCallback(nullptr);
+            }
+        }
+
+        // Create a temporary camera for rendering
+        Camera tempCamera;
+        tempCamera.setViewMatrix(frameData.camera.viewMatrix);
+        tempCamera.setProjectionMatrix(frameData.camera.projectionMatrix);
+        tempCamera.setPosition(frameData.camera.position);
+
+        // Draw the frame
+        bool success = renderer_->drawFrame(&tempCamera);
+
+        if (!success) {
+            // Swapchain needs recreation - this will be handled next frame
+            swapchainRecreateRequested_.store(true, std::memory_order_release);
+        }
+
+        lastCompletedFrame_.store(frameData.frameNumber, std::memory_order_release);
+    }
+
+    // ============================================================================
+    // SYNC ECS TO RENDERER (Future: for more complex mesh management)
+    // ============================================================================
+
+    void RenderThread::syncECSToRenderer() {
+        // This is handled in renderFrame via FrameData
     }
 
 } // namespace libre

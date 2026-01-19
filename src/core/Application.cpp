@@ -7,13 +7,12 @@
 #include "Application.h"
 #include "Editor.h"
 #include "FrameData.h"
+#include "Selection.h"
 #include "../render/RenderThread.h"
 #include "../render/Mesh.h"
 #include "../world/Primitives.h"
 #include "../ui/UI.h"
 #include "../ui/Widgets.h"
-#include "../ui/PreferencesWindow.h"
-#include "../ShaderCompiler.h"
 #include "../ui/UIScale.h"
 
 #include <iostream>
@@ -68,20 +67,15 @@ void Application::init() {
 
     // Setup window resize callback - just sets a flag, doesn't render
     window->setRefreshCallback([this]() {
-        // During modal drag/resize, just mark that we need to handle it
-        // DO NOT render here - that would block the message loop!
         if (!window->isInModalLoop()) {
-            // Normal case: window was resized outside of drag
             pendingResize.store(true, std::memory_order_release);
         }
-        // During modal loop: render thread keeps running independently
-        // No action needed - this is the whole point of the render thread!
         });
 
     // Create default scene
     createDefaultScene();
 
-    // Setup UI (must be after render thread starts)
+    // Setup UI (must be after render thread starts and Vulkan is initialized)
     setupUI();
 
     printControls();
@@ -89,28 +83,161 @@ void Application::init() {
     std::cout << "=== Initialization Complete ===\n" << std::endl;
 }
 
+// ============================================================================
+// UI SETUP - FIXED VERSION
+// ============================================================================
+
 void Application::setupUI() {
     std::cout << "[DEBUG] Setting up UI..." << std::endl;
 
     using namespace libre::ui;
 
-    // Note: UIManager will need modification to work with render thread
-    // For now, we initialize it but may need to adjust how it renders
+    // Create UIManager
     uiManager = std::make_unique<UIManager>();
 
-    // UI initialization needs to happen differently with render thread
-    // TODO: UIManager needs to be refactored to submit draw commands to render thread
-    // For now, we'll initialize it minimally
-    // uiManager->init(vulkanContext.get(), swapChain->getRenderPass(), window->getHandle());
+    // =========================================================================
+    // CRITICAL: Wait for render thread to fully initialize Vulkan
+    // =========================================================================
+    std::cout << "[DEBUG] Waiting for render thread to initialize Vulkan..." << std::endl;
 
-    // Setup callback for when window moves to different monitor (DPI change)
+    auto waitStart = std::chrono::steady_clock::now();
+    while (!renderThread->isRunning()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(10)) {
+            std::cerr << "[ERROR] Timeout waiting for render thread!" << std::endl;
+            return;
+        }
+    }
+
+    // Get Vulkan objects from render thread
+    VulkanContext* ctx = renderThread->getVulkanContext();
+    VkRenderPass renderPass = renderThread->getRenderPass();
+
+    if (!ctx) {
+        std::cerr << "[ERROR] VulkanContext is null!" << std::endl;
+        return;
+    }
+
+    if (renderPass == VK_NULL_HANDLE) {
+        std::cerr << "[ERROR] RenderPass is null!" << std::endl;
+        return;
+    }
+
+    std::cout << "[DEBUG] Got Vulkan objects from render thread" << std::endl;
+
+    // =========================================================================
+    // INITIALIZE UI MANAGER
+    // =========================================================================
+    uiManager->init(ctx, renderPass, window->getHandle());
+    std::cout << "[DEBUG] UIManager initialized" << std::endl;
+
+    // =========================================================================
+    // CREATE MENU BAR
+    // =========================================================================
+    auto menuBar = std::make_unique<MenuBar>();
+
+    // File menu
+    menuBar->addMenu("File", {
+        MenuItem::Action("New", []() {
+            std::cout << "[Menu] New file\n";
+        }, "Ctrl+N"),
+        MenuItem::Action("Open...", []() {
+            std::cout << "[Menu] Open file\n";
+        }, "Ctrl+O"),
+        MenuItem::Action("Save", []() {
+            std::cout << "[Menu] Save file\n";
+        }, "Ctrl+S"),
+        MenuItem::Action("Save As...", []() {
+            std::cout << "[Menu] Save As\n";
+        }, "Ctrl+Shift+S"),
+        MenuItem::Separator(),
+        MenuItem::Action("Exit", [this]() {
+            std::cout << "[Menu] Exit\n";
+            glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE);
+        }, "Alt+F4")
+        });
+
+    // Edit menu
+    menuBar->addMenu("Edit", {
+        MenuItem::Action("Undo", []() {
+            libre::Editor::instance().undo();
+        }, "Ctrl+Z"),
+        MenuItem::Action("Redo", []() {
+            libre::Editor::instance().redo();
+        }, "Ctrl+Y"),
+        MenuItem::Separator(),
+        MenuItem::Action("Select All", []() {
+            libre::Editor::instance().selectAll();
+        }, "Ctrl+A"),
+        MenuItem::Action("Deselect All", []() {
+            libre::Editor::instance().deselectAll();
+        })
+        });
+
+    // View menu
+    menuBar->addMenu("View", {
+        MenuItem::Action("Reset View", [this]() {
+            std::cout << "[Menu] Reset View\n";
+            camera->reset();
+        }),
+        MenuItem::Action("Front View", [this]() {
+            camera->setFront();
+        }, "Numpad 1"),
+        MenuItem::Action("Right View", [this]() {
+            camera->setRight();
+        }, "Numpad 3"),
+        MenuItem::Action("Top View", [this]() {
+            camera->setTop();
+        }, "Numpad 7")
+        });
+
+    // Help menu
+    menuBar->addMenu("Help", {
+        MenuItem::Action("About", []() {
+            std::cout << "=== LibreDCC ===" << std::endl;
+            std::cout << "Version: 0.1.0 (Alpha)" << std::endl;
+            std::cout << "A modular 3D creative suite" << std::endl;
+        })
+        });
+
+    uiManager->setMenuBar(std::move(menuBar));
+    std::cout << "[DEBUG] Menu bar created" << std::endl;
+
+    // =========================================================================
+    // CONNECT UI RENDERING TO RENDER THREAD
+    // =========================================================================
+    renderThread->setUIRenderCallback([this](void* commandBuffer) {
+        if (uiManager) {
+            uint32_t w, h;
+            renderThread->getSwapchainExtent(w, h);
+
+            if (w > 0 && h > 0) {
+                uiManager->layout(static_cast<float>(w), static_cast<float>(h));
+                uiManager->render(static_cast<VkCommandBuffer>(commandBuffer));
+            }
+        }
+        });
+    std::cout << "[DEBUG] UI render callback connected" << std::endl;
+
+    // =========================================================================
+    // INITIAL LAYOUT
+    // =========================================================================
+    int w, h;
+    glfwGetFramebufferSize(window->getHandle(), &w, &h);
+    uiManager->layout(static_cast<float>(w), static_cast<float>(h));
+
+    // =========================================================================
+    // SETUP DPI CHANGE CALLBACK
+    // =========================================================================
     glfwSetWindowContentScaleCallback(window->getHandle(),
         [](GLFWwindow* win, float xscale, float yscale) {
+            std::cout << "[UI] Content scale changed: " << xscale << ", " << yscale << std::endl;
             libre::ui::UIScale::instance().onMonitorChanged(win);
         }
     );
 
-    std::cout << "[DEBUG] UI setup complete (render thread mode)" << std::endl;
+    std::cout << "[DEBUG] UI setup complete" << std::endl;
 }
 
 void Application::cleanup() {
@@ -163,7 +290,6 @@ void Application::printControls() {
     std::cout << "Shift + Middle Mouse: Pan camera" << std::endl;
     std::cout << "Scroll: Zoom" << std::endl;
     std::cout << "Left Click: Select object" << std::endl;
-    std::cout << "F11: Toggle fullscreen" << std::endl;
     std::cout << "ESC: Exit" << std::endl;
     std::cout << "================\n" << std::endl;
 }
@@ -184,8 +310,6 @@ void Application::mainLoop() {
         // ====================================================================
         // 2. HANDLE RESIZE COMPLETION
         // ====================================================================
-        // Only request swapchain recreation when resize is COMPLETE
-        // (not during the resize drag)
         if (!window->isInModalLoop() &&
             (pendingResize.load(std::memory_order_acquire) || window->wasResized())) {
 
@@ -193,14 +317,16 @@ void Application::mainLoop() {
             glfwGetFramebufferSize(window->getHandle(), &w, &h);
 
             if (w > 0 && h > 0) {
-                // Update camera aspect ratio
                 camera->setAspectRatio(static_cast<float>(w) / static_cast<float>(h));
 
-                // Request swapchain recreation (async - render thread handles it)
                 renderThread->requestSwapchainRecreate(
                     static_cast<uint32_t>(w),
                     static_cast<uint32_t>(h)
                 );
+
+                if (uiManager) {
+                    uiManager->layout(static_cast<float>(w), static_cast<float>(h));
+                }
 
                 std::cout << "[MainLoop] Resize complete: " << w << "x" << h << std::endl;
             }
@@ -213,7 +339,6 @@ void Application::mainLoop() {
         // 3. SKIP IF MINIMIZED
         // ====================================================================
         if (isMinimized()) {
-            // Sleep to avoid spinning
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             continue;
         }
@@ -225,7 +350,6 @@ void Application::mainLoop() {
         deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
         lastFrameTime = currentTime;
         totalTime = std::chrono::duration<float>(currentTime - startTime).count();
-        fps = 1.0f / deltaTime;
 
         // ====================================================================
         // 5. PROCESS INPUT
@@ -233,7 +357,7 @@ void Application::mainLoop() {
         processInput(deltaTime);
 
         // ====================================================================
-        // 6. UPDATE GAME STATE
+        // 6. UPDATE GAME/EDITOR STATE
         // ====================================================================
         update(deltaTime);
 
@@ -251,113 +375,52 @@ void Application::mainLoop() {
         // 9. UPDATE INPUT STATE
         // ====================================================================
         inputManager->update();
-
-        // ====================================================================
-        // 10. FRAME COMPLETE - Loop continues immediately!
-        // ====================================================================
-        // Main thread NEVER waits for GPU. This is the key to smooth window drag.
     }
 
     std::cout << "[MainLoop] Main loop ended" << std::endl;
 }
 
 // ============================================================================
-// PREPARE FRAME DATA
-// ============================================================================
-
-libre::FrameData Application::prepareFrameData() {
-    libre::FrameData data;
-
-    // Frame info
-    data.frameNumber = frameNumber++;
-    data.deltaTime = deltaTime;
-    data.totalTime = totalTime;
-
-    // Camera
-    data.camera.viewMatrix = camera->getViewMatrix();
-    data.camera.projectionMatrix = camera->getProjectionMatrix();
-    data.camera.position = camera->getPosition();
-    data.camera.forward = glm::normalize(camera->getTarget() - camera->getPosition());
-    data.camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
-    data.camera.fov = camera->fov;
-    data.camera.nearPlane = camera->nearPlane;
-    data.camera.farPlane = camera->farPlane;
-
-    int w, h;
-    glfwGetFramebufferSize(window->getHandle(), &w, &h);
-    data.camera.aspectRatio = static_cast<float>(w) / static_cast<float>(std::max(1, h));
-
-    // Lighting
-    data.light.direction = glm::normalize(glm::vec3(0.5f, 0.7f, 0.5f));
-    data.light.color = glm::vec3(1.0f);
-    data.light.intensity = 1.0f;
-    data.light.ambientStrength = 0.15f;
-
-    // Viewport
-    data.viewport.width = static_cast<uint32_t>(std::max(1, w));
-    data.viewport.height = static_cast<uint32_t>(std::max(1, h));
-    data.viewport.showGrid = true;
-
-    // Collect meshes from ECS
-    auto& editor = libre::Editor::instance();
-    auto& world = editor.getWorld();
-
-    world.forEach<libre::MeshComponent>([&](libre::EntityID id, libre::MeshComponent& mesh) {
-        auto* transform = world.getComponent<libre::TransformComponent>(id);
-        if (transform) {
-            libre::RenderableMesh rm;
-            rm.meshHandle = static_cast<libre::MeshHandle>(id);  // Temporary: use entity ID
-            rm.modelMatrix = transform->worldMatrix;  // Direct access to worldMatrix
-            rm.entityId = id;
-            rm.isSelected = editor.isSelected(id);  // Use Editor's isSelected
-            rm.color = rm.isSelected ? glm::vec4(1.0f, 0.5f, 0.0f, 1.0f)
-                : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
-            data.meshes.push_back(rm);
-        }
-        });
-
-    // UI
-    data.ui.screenWidth = static_cast<float>(data.viewport.width);
-    data.ui.screenHeight = static_cast<float>(data.viewport.height);
-    data.ui.dpiScale = 1.0f;  // TODO: Get from UIScale
-
-    return data;
-}
-
-// ============================================================================
-// INPUT PROCESSING
+// PROCESS INPUT
 // ============================================================================
 
 void Application::processInput(float dt) {
-    auto& editor = libre::Editor::instance();
+    double mouseX = inputManager->getMouseX();
+    double mouseY = inputManager->getMouseY();
 
-    // Exit
-    if (inputManager->isKeyPressed(GLFW_KEY_ESCAPE)) {
-        glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE);
+    // Forward mouse events to UI
+    if (uiManager) {
+        uiManager->onMouseMove(static_cast<float>(mouseX), static_cast<float>(mouseY));
     }
 
-    // Toggle fullscreen with F11
-    if (inputManager->isKeyJustPressed(GLFW_KEY_F11)) {
-        static bool isFullscreen = false;
-        static int savedX, savedY, savedWidth, savedHeight;
-
-        if (!isFullscreen) {
-            glfwGetWindowPos(window->getHandle(), &savedX, &savedY);
-            glfwGetWindowSize(window->getHandle(), &savedWidth, &savedHeight);
-
-            GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-            const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-            glfwSetWindowMonitor(window->getHandle(), monitor, 0, 0,
-                mode->width, mode->height, mode->refreshRate);
+    // Left mouse button
+    if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+        if (uiManager) {
+            uiManager->onMouseButton(libre::ui::MouseButton::Left, true);
         }
-        else {
-            glfwSetWindowMonitor(window->getHandle(), nullptr,
-                savedX, savedY, savedWidth, savedHeight, 0);
-        }
-        isFullscreen = !isFullscreen;
+        handleSelection();
     }
 
-    // Track modifier keys
+    if (inputManager->isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_LEFT)) {
+        if (uiManager) {
+            uiManager->onMouseButton(libre::ui::MouseButton::Left, false);
+        }
+    }
+
+    // Right mouse button
+    if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
+        if (uiManager) {
+            uiManager->onMouseButton(libre::ui::MouseButton::Right, true);
+        }
+    }
+
+    if (inputManager->isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_RIGHT)) {
+        if (uiManager) {
+            uiManager->onMouseButton(libre::ui::MouseButton::Right, false);
+        }
+    }
+
+    // Modifier keys
     shiftHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_SHIFT) ||
         inputManager->isKeyPressed(GLFW_KEY_RIGHT_SHIFT);
     ctrlHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_CONTROL) ||
@@ -365,10 +428,9 @@ void Application::processInput(float dt) {
     altHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_ALT) ||
         inputManager->isKeyPressed(GLFW_KEY_RIGHT_ALT);
 
-    // Camera controls - use correct API
-    double mouseX = inputManager->getMouseX();
-    double mouseY = inputManager->getMouseY();
-
+    // =========================================================================
+    // CAMERA CONTROLS - MIDDLE MOUSE BUTTON
+    // =========================================================================
     if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_MIDDLE)) {
         middleMouseDown = true;
         lastMouseX = mouseX;
@@ -396,15 +458,30 @@ void Application::processInput(float dt) {
         lastMouseY = mouseY;
     }
 
-    // Zoom with scroll - use correct API
+    // Scroll wheel - zoom
     double scrollY = inputManager->getScrollY();
     if (scrollY != 0.0) {
+        if (uiManager) {
+            uiManager->onMouseScroll(static_cast<float>(scrollY));
+        }
         camera->zoom(static_cast<float>(scrollY) * 0.5f);
     }
 
-    // Selection with left click
-    if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_LEFT)) {
-        handleSelection();
+    // Keyboard shortcuts
+    if (inputManager->isKeyJustPressed(GLFW_KEY_ESCAPE)) {
+        glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE);
+    }
+
+    // Forward keyboard events to UI
+    if (uiManager) {
+        for (int key = GLFW_KEY_SPACE; key <= GLFW_KEY_LAST; key++) {
+            if (inputManager->isKeyJustPressed(key)) {
+                uiManager->onKey(key, true, shiftHeld, ctrlHeld, altHeld);
+            }
+            if (inputManager->isKeyJustReleased(key)) {
+                uiManager->onKey(key, false, shiftHeld, ctrlHeld, altHeld);
+            }
+        }
     }
 }
 
@@ -413,7 +490,6 @@ void Application::processInput(float dt) {
 // ============================================================================
 
 void Application::update(float dt) {
-    // Update ECS transforms
     updateTransforms();
 }
 
@@ -442,18 +518,100 @@ void Application::updateTransforms() {
         });
 }
 
-void Application::syncECSToRenderer() {
-    // TODO: This needs to be reimplemented for the render thread architecture
-    // Mesh registration/unregistration should go through RenderThread
+// ============================================================================
+// PREPARE FRAME DATA
+// ============================================================================
+
+libre::FrameData Application::prepareFrameData() {
+    libre::FrameData data;
+
+    // Frame info
+    data.frameNumber = frameNumber++;
+    data.deltaTime = deltaTime;
+    data.totalTime = totalTime;
+
+    // Camera
+    data.camera.viewMatrix = camera->getViewMatrix();
+    data.camera.projectionMatrix = camera->getProjectionMatrix();
+    data.camera.position = camera->getPosition();
+    data.camera.forward = glm::normalize(camera->getTarget() - camera->getPosition());
+    data.camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
+    data.camera.fov = camera->fov;
+    data.camera.nearPlane = camera->nearPlane;
+    data.camera.farPlane = camera->farPlane;
+
+    int w, h;
+    glfwGetFramebufferSize(window->getHandle(), &w, &h);
+    data.camera.aspectRatio = static_cast<float>(w) / static_cast<float>(std::max(1, h));
+
+    // Lighting - use vec4 for color (RGBA)
+    data.light.direction = glm::normalize(glm::vec4(0.5f, 0.7f, 0.5f, 0.0f));
+    data.light.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+    data.light.intensity = 1.0f;
+    data.light.ambientStrength = 0.15f;
+
+    // Viewport
+    data.viewport.width = static_cast<uint32_t>(std::max(1, w));
+    data.viewport.height = static_cast<uint32_t>(std::max(1, h));
+    data.viewport.showGrid = true;
+
+    // Collect meshes from ECS
+    auto& editor = libre::Editor::instance();
+    auto& world = editor.getWorld();
+
+    world.forEach<libre::MeshComponent>([&](libre::EntityID id, libre::MeshComponent& mesh) {
+        auto* transform = world.getComponent<libre::TransformComponent>(id);
+        if (transform) {
+            libre::RenderableMesh rm;
+            rm.meshHandle = static_cast<libre::MeshHandle>(id);
+            rm.modelMatrix = transform->worldMatrix;
+            rm.entityId = id;
+            rm.isSelected = editor.isSelected(id);
+            rm.color = rm.isSelected ? glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
+            data.meshes.push_back(rm);
+        }
+        });
+
+    // UI data
+    data.ui.screenWidth = static_cast<float>(w);
+    data.ui.screenHeight = static_cast<float>(h);
+    data.ui.dpiScale = libre::ui::UIScale::instance().getScaleFactor();
+
+    return data;
 }
+
+// ============================================================================
+// SELECTION
+// ============================================================================
 
 void Application::handleSelection() {
-    // TODO: Implement GPU picking through render thread
-    // For now, selection is disabled
-}
+    double mouseX = inputManager->getMouseX();
+    double mouseY = inputManager->getMouseY();
 
-void Application::openPreferencesWindow() {
-    // TODO: Implement with UI system
+    int w, h;
+    glfwGetFramebufferSize(window->getHandle(), &w, &h);
+
+    libre::Ray ray = libre::SelectionSystem::screenToRay(
+        *camera,
+        static_cast<float>(mouseX),
+        static_cast<float>(mouseY),
+        w, h
+    );
+
+    auto& world = libre::Editor::instance().getWorld();
+    libre::HitResult hit = libre::SelectionSystem::raycast(world, ray);
+
+    auto& editor = libre::Editor::instance();
+
+    if (hit.hit()) {
+        if (!shiftHeld) {
+            editor.deselectAll();
+        }
+        editor.select(hit.entity);
+    }
+    else if (!shiftHeld) {
+        editor.deselectAll();
+    }
 }
 
 // ============================================================================
@@ -461,7 +619,7 @@ void Application::openPreferencesWindow() {
 // ============================================================================
 
 bool Application::isMinimized() const {
-    int width, height;
-    glfwGetFramebufferSize(window->getHandle(), &width, &height);
-    return width == 0 || height == 0;
+    int w, h;
+    glfwGetFramebufferSize(window->getHandle(), &w, &h);
+    return (w == 0 || h == 0);
 }
