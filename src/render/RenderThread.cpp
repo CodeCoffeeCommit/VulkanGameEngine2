@@ -4,8 +4,11 @@
 #include "VulkanContext.h"
 #include "SwapChain.h"
 #include "Renderer.h"
+#include "Mesh.h"
 #include "../core/Camera.h"
 #include "../core/Window.h"
+#include "../core/Editor.h"
+#include "../components/CoreComponents.h"
 
 #include <iostream>
 #include <chrono>
@@ -45,10 +48,8 @@ namespace libre {
         shouldStop_.store(false);
         hasError_.store(false);
 
-        // Start the render thread
         thread_ = std::thread(&RenderThread::threadMain, this);
 
-        // Wait for thread to initialize (with timeout)
         auto startTime = std::chrono::steady_clock::now();
         while (!running_.load() && !hasError_.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -134,9 +135,6 @@ namespace libre {
         newSwapchainWidth_.store(width, std::memory_order_relaxed);
         newSwapchainHeight_.store(height, std::memory_order_relaxed);
         swapchainRecreateRequested_.store(true, std::memory_order_release);
-
-        std::cout << "[RenderThread] Swapchain recreation requested: "
-            << width << "x" << height << std::endl;
     }
 
     void RenderThread::getSwapchainExtent(uint32_t& width, uint32_t& height) const {
@@ -168,7 +166,6 @@ namespace libre {
     void RenderThread::threadMain() {
         std::cout << "[RenderThread] Thread started" << std::endl;
 
-        // Initialize Vulkan ON THIS THREAD
         if (!initializeVulkan()) {
             std::lock_guard<std::mutex> lock(errorMutex_);
             errorMessage_ = "Failed to initialize Vulkan";
@@ -176,11 +173,7 @@ namespace libre {
             return;
         }
 
-        // Signal that we're running
         running_.store(true, std::memory_order_release);
-
-        // Create a temporary camera for rendering
-        Camera tempCamera;
 
         // Main render loop
         while (!shouldStop_.load(std::memory_order_acquire)) {
@@ -199,19 +192,22 @@ namespace libre {
                 continue;
             }
 
-            // Check for new frame data
+            // Get frame data
+            FrameData currentFrameData;
             if (newFrameAvailable_.load(std::memory_order_acquire)) {
                 int readIdx = writeBufferIndex_.load(std::memory_order_acquire);
                 readBufferIndex_.store(readIdx, std::memory_order_relaxed);
                 writeBufferIndex_.store(1 - readIdx, std::memory_order_release);
                 newFrameAvailable_.store(false, std::memory_order_release);
-
-                renderFrame(frameBuffers_[readIdx]);
+                currentFrameData = frameBuffers_[readIdx];
             }
             else {
                 int readIdx = readBufferIndex_.load(std::memory_order_acquire);
-                renderFrame(frameBuffers_[readIdx]);
+                currentFrameData = frameBuffers_[readIdx];
             }
+
+            // Render the frame
+            renderFrame(currentFrameData);
 
             // Update FPS counter
             frameCount_++;
@@ -224,7 +220,6 @@ namespace libre {
             }
         }
 
-        // Cleanup Vulkan ON THIS THREAD
         cleanupVulkan();
 
         running_.store(false, std::memory_order_release);
@@ -232,27 +227,23 @@ namespace libre {
     }
 
     // ============================================================================
-    // VULKAN INITIALIZATION (On Render Thread)
+    // VULKAN INITIALIZATION
     // ============================================================================
 
     bool RenderThread::initializeVulkan() {
         try {
             std::cout << "[RenderThread] Initializing Vulkan..." << std::endl;
 
-            // Create Vulkan context - takes Window* in constructor
             vulkanContext_ = std::make_unique<VulkanContext>(window_);
-            vulkanContext_->init();  // No arguments!
+            vulkanContext_->init();
 
-            // Create swap chain - takes GLFWwindow*
             swapChain_ = std::make_unique<SwapChain>();
             swapChain_->init(vulkanContext_.get(), window_->getHandle());
 
-            // Update cached extent
             VkExtent2D extent = swapChain_->getExtent();
             currentSwapchainWidth_.store(extent.width, std::memory_order_release);
             currentSwapchainHeight_.store(extent.height, std::memory_order_release);
 
-            // Create renderer
             renderer_ = std::make_unique<Renderer>();
             renderer_->init(vulkanContext_.get(), swapChain_.get());
 
@@ -292,6 +283,56 @@ namespace libre {
     }
 
     // ============================================================================
+    // SYNC ECS TO RENDERER (Called on Render Thread)
+    // ============================================================================
+
+    void RenderThread::syncECSToRenderer() {
+        if (!renderer_) return;
+
+        // Access ECS from render thread
+        auto& world = Editor::instance().getWorld();
+
+        world.forEach<MeshComponent>([&](EntityID id, MeshComponent& meshComp) {
+            auto* transform = world.getComponent<TransformComponent>(id);
+            auto* render = world.getComponent<RenderComponent>(id);
+
+            if (!transform) return;
+            if (render && !render->visible) return;
+
+            // Convert MeshVertex to Vertex for the renderer
+            std::vector<Vertex> vulkanVertices;
+            vulkanVertices.reserve(meshComp.vertices.size());
+
+            glm::vec3 baseColor = render ? render->baseColor : glm::vec3(0.8f);
+
+            for (const auto& v : meshComp.vertices) {
+                Vertex vk;
+                vk.position = v.position;
+                vk.normal = v.normal;
+                vk.color = baseColor;
+                vulkanVertices.push_back(vk);
+            }
+
+            // Get or create the GPU mesh
+            Mesh* mesh = renderer_->getOrCreateMesh(
+                id,
+                vulkanVertices.data(),
+                vulkanVertices.size(),
+                meshComp.indices.data(),
+                meshComp.indices.size()
+            );
+
+            if (mesh) {
+                // Check if selected
+                bool isSelected = Editor::instance().isSelected(id);
+                glm::vec3 color = isSelected ? glm::vec3(1.0f, 0.5f, 0.0f) : baseColor;
+
+                renderer_->submitMesh(mesh, transform->worldMatrix, color, isSelected);
+            }
+            });
+    }
+
+    // ============================================================================
     // RENDER ONE FRAME
     // ============================================================================
 
@@ -300,12 +341,18 @@ namespace libre {
             return;
         }
 
-        // Create a temporary camera from frame data
-        Camera tempCamera;
-        tempCamera.setAspectRatio(frameData.camera.aspectRatio);
+        // Create camera and set matrices from FrameData
+        Camera renderCamera;
+        renderCamera.setViewMatrix(frameData.camera.viewMatrix);
+        renderCamera.setProjectionMatrix(frameData.camera.projectionMatrix);
+        renderCamera.setPosition(frameData.camera.position);
+        renderCamera.setAspectRatio(frameData.camera.aspectRatio);
+
+        // Sync meshes from ECS to renderer
+        syncECSToRenderer();
 
         // Draw frame
-        bool success = renderer_->drawFrame(&tempCamera);
+        bool success = renderer_->drawFrame(&renderCamera);
 
         if (!success) {
             uint32_t w = currentSwapchainWidth_.load();
@@ -319,7 +366,7 @@ namespace libre {
     }
 
     // ============================================================================
-    // SWAPCHAIN RECREATION (On Render Thread)
+    // SWAPCHAIN RECREATION
     // ============================================================================
 
     void RenderThread::recreateSwapchain() {
@@ -327,7 +374,6 @@ namespace libre {
         uint32_t height = newSwapchainHeight_.load(std::memory_order_acquire);
 
         if (width == 0 || height == 0) {
-            std::cout << "[RenderThread] Skipping swapchain recreation (zero size)" << std::endl;
             return;
         }
 
@@ -335,7 +381,6 @@ namespace libre {
 
         vkDeviceWaitIdle(vulkanContext_->getDevice());
 
-        // Recreate swapchain - takes GLFWwindow*
         swapChain_->recreate(window_->getHandle());
 
         VkExtent2D extent = swapChain_->getExtent();

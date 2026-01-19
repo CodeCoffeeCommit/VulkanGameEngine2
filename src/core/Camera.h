@@ -1,5 +1,4 @@
 // src/core/Camera.h
-// THIS IS YOUR ORIGINAL FILE - RESTORE THIS
 
 #pragma once
 
@@ -13,7 +12,7 @@ public:
     Camera();
     ~Camera() = default;
 
-    // Update matrices
+    // Update matrices (from orbit parameters)
     void update();
 
     // Blender-style orbit controls
@@ -35,6 +34,13 @@ public:
 
     // Set aspect ratio (call on resize)
     void setAspectRatio(float aspect);
+
+    // ========================================================================
+    // SETTERS for Render Thread (to use matrices from FrameData)
+    // ========================================================================
+    void setViewMatrix(const glm::mat4& view) { viewMatrix = view; }
+    void setProjectionMatrix(const glm::mat4& proj) { projectionMatrix = proj; }
+    void setPosition(const glm::vec3& pos) { position = pos; }
 
     // Camera settings (public for easy access)
     float fov = 45.0f;

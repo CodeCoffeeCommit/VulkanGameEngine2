@@ -1,7 +1,4 @@
 // src/render/RenderThread.h
-//
-// RenderThread - Dedicated thread for all Vulkan operations.
-//
 
 #pragma once
 
@@ -10,6 +7,7 @@
 #include <mutex>
 #include <functional>
 #include <memory>
+#include <chrono>
 
 #include "../core/FrameData.h"
 
@@ -18,7 +16,7 @@ class VulkanContext;
 class SwapChain;
 class Renderer;
 class Camera;
-class Window;  // Our Window class, not GLFWwindow
+class Window;
 
 namespace libre {
 
@@ -34,66 +32,50 @@ namespace libre {
         RenderThread& operator=(RenderThread&&) = delete;
 
         // ========================================================================
-        // LIFECYCLE (Called from Main Thread)
+        // LIFECYCLE
         // ========================================================================
 
-        // Initialize and start the render thread
-        // Takes Window* (our wrapper class)
         bool start(Window* window);
-
-        // Signal thread to stop and wait for it to finish
         void stop();
-
-        // Check if render thread is running
         bool isRunning() const { return running_.load(std::memory_order_acquire); }
-
-        // Check if render thread encountered an error
         bool hasError() const { return hasError_.load(std::memory_order_acquire); }
         std::string getErrorMessage() const;
 
         // ========================================================================
-        // FRAME SUBMISSION (Called from Main Thread)
+        // FRAME SUBMISSION
         // ========================================================================
 
-        // Submit frame data for rendering (non-blocking)
         void submitFrameData(const FrameData& data);
-
-        // Set UI render callback
         void setUIRenderCallback(std::function<void(void* commandBuffer)> callback);
 
         // ========================================================================
-        // SWAPCHAIN MANAGEMENT (Called from Main Thread)
+        // SWAPCHAIN MANAGEMENT
         // ========================================================================
 
         void requestSwapchainRecreate(uint32_t width, uint32_t height);
-
         bool isSwapchainRecreatePending() const {
             return swapchainRecreateRequested_.load(std::memory_order_acquire);
         }
 
         // ========================================================================
-        // RESOURCE MANAGEMENT (Called from Main Thread)
+        // RESOURCE MANAGEMENT
         // ========================================================================
 
         MeshHandle registerMesh(const void* vertices, size_t vertexCount,
             const uint32_t* indices, size_t indexCount,
             uint64_t entityId);
-
         void unregisterMesh(MeshHandle handle);
-
         void updateMeshRegion(MeshHandle handle, uint32_t startVertex,
             uint32_t vertexCount, const void* vertexData);
 
         // ========================================================================
-        // QUERIES (Thread-safe)
+        // QUERIES
         // ========================================================================
 
         void getSwapchainExtent(uint32_t& width, uint32_t& height) const;
-
         uint64_t getLastCompletedFrame() const {
             return lastCompletedFrame_.load(std::memory_order_acquire);
         }
-
         float getCurrentFPS() const { return currentFPS_.load(std::memory_order_relaxed); }
 
     private:
@@ -106,6 +88,7 @@ namespace libre {
         void cleanupVulkan();
         void renderFrame(const FrameData& frameData);
         void recreateSwapchain();
+        void syncECSToRenderer();
 
         // ========================================================================
         // THREAD STATE
@@ -140,13 +123,13 @@ namespace libre {
         std::atomic<uint32_t> currentSwapchainHeight_{ 0 };
 
         // ========================================================================
-        // VULKAN OBJECTS (Owned by render thread)
+        // VULKAN OBJECTS
         // ========================================================================
 
         std::unique_ptr<VulkanContext> vulkanContext_;
         std::unique_ptr<SwapChain> swapChain_;
         std::unique_ptr<Renderer> renderer_;
-        Window* window_ = nullptr;  // Not owned, just referenced
+        Window* window_ = nullptr;
 
         // ========================================================================
         // CALLBACKS
