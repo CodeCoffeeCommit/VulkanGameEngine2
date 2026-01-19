@@ -134,7 +134,6 @@ glfw3dll.lib;freetype.lib
     <ClCompile Include="src\core\Application.cpp" />
     <ClCompile Include="src\core\Camera.cpp" />
     <ClCompile Include="src\core\Editor.cpp" />
-    <ClCompile Include="src\core\Event.cpp" />
     <ClCompile Include="src\core\Inputmanager.cpp" />
     <ClCompile Include="src\core\Window.cpp" />
     <ClCompile Include="src\main.cpp" />
@@ -143,6 +142,7 @@ glfw3dll.lib;freetype.lib
     <ClCompile Include="src\render\Mesh.cpp" />
     <ClCompile Include="src\render\Primitives.cpp" />
     <ClCompile Include="src\render\Renderer.cpp" />
+    <ClCompile Include="src\render\RenderThread.cpp" />
     <ClCompile Include="src\render\SwapChain.cpp" />
     <ClCompile Include="src\render\UniformBuffer.cpp" />
     <ClCompile Include="src\render\VulkanContext.cpp" />
@@ -163,6 +163,7 @@ glfw3dll.lib;freetype.lib
     <ClInclude Include="src\core\Command.h" />
     <ClInclude Include="src\core\Editor.h" />
     <ClInclude Include="src\core\Event.h" />
+    <ClInclude Include="src\core\FrameData.h" />
     <ClInclude Include="src\core\Inputmanager.h" />
     <ClInclude Include="src\core\Selection.h" />
     <ClInclude Include="src\core\Window.h" />
@@ -171,6 +172,7 @@ glfw3dll.lib;freetype.lib
     <ClInclude Include="src\render\Mesh.h" />
     <ClInclude Include="src\render\Primitives.h" />
     <ClInclude Include="src\render\Renderer.h" />
+    <ClInclude Include="src\render\RenderThread.h" />
     <ClInclude Include="src\render\SwapChain.h" />
     <ClInclude Include="src\render\UniformBuffer.h" />
     <ClInclude Include="src\render\VulkanContext.h" />

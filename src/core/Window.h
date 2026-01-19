@@ -37,6 +37,7 @@ public:
     void resetResizeFlag() { framebufferResized = false; }
 
     // Set callback for rendering during drag/resize
+    // Note: With render thread, this is mainly for signaling, not actual rendering
     void setRefreshCallback(std::function<void()> callback);
 
     // Callback data access (for InputManager to register)
@@ -48,6 +49,12 @@ public:
 
     // Check if currently in modal resize/move loop (Windows-specific)
     bool isInModalLoop() const { return inModalLoop_; }
+
+    // Check if currently resizing (NEW)
+    bool isResizing() const { return isResizing_; }
+
+    // Allow Application to set framebufferResized directly
+    bool framebufferResized = false;
 
 private:
     // GLFW callbacks
@@ -66,10 +73,12 @@ private:
     int width;
     int height;
     std::string title;
-    bool framebufferResized = false;
 
     // Track modal loop state
     std::atomic<bool> inModalLoop_{ false };
+
+    // Track resize state (NEW - for render thread architecture)
+    std::atomic<bool> isResizing_{ false };
 
     // Shared callback data - Window owns this
     CallbackData callbackData;

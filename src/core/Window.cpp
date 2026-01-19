@@ -1,4 +1,11 @@
 // src/core/Window.cpp
+//
+// RENDER THREAD ARCHITECTURE:
+// - WM_MOVING/WM_SIZING no longer trigger rendering
+// - Render thread runs independently
+// - Swapchain recreation only when resize ENDS
+//
+
 #include "Window.h"
 #include <stdexcept>
 #include <iostream>
@@ -15,26 +22,66 @@ LRESULT CALLBACK Window::windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
     switch (msg) {
     case WM_ENTERSIZEMOVE:
+        // Entering modal drag/resize loop
         self->inModalLoop_ = true;
         break;
 
     case WM_EXITSIZEMOVE:
+        // Exiting modal drag/resize loop
         self->inModalLoop_ = false;
+        self->isResizing_ = false;
+        // Signal that resize completed - main loop will request swapchain recreate
+        self->framebufferResized = true;
         break;
 
     case WM_MOVING:
+        // Window is being dragged by title bar
+        // RENDER THREAD ARCHITECTURE: Do nothing here!
+        // The render thread continues rendering independently.
+        // This is why window drag is now smooth.
+        break;
+
     case WM_SIZING:
-        // Render during drag/resize
-        if (self->callbackData.onRefresh) {
-            self->callbackData.onRefresh();
-        }
+        // Window edge is being dragged to resize
+        // RENDER THREAD ARCHITECTURE: Do nothing here!
+        // The render thread continues at the old size.
+        // When user releases mouse (WM_EXITSIZEMOVE), we recreate swapchain.
+        self->isResizing_ = true;
         break;
 
     case WM_PAINT:
-        if (self->inModalLoop_ && self->callbackData.onRefresh) {
-            self->callbackData.onRefresh();
+        // Paint messages during modal loop
+        // RENDER THREAD ARCHITECTURE: No special handling needed.
+        // Render thread is already rendering continuously.
+        // Just validate the paint region to prevent more WM_PAINT messages.
+        if (self->inModalLoop_) {
+            ValidateRect(hwnd, nullptr);
+            return 0;
         }
         break;
+
+    case WM_SIZE:
+        // Window size changed (also sent during minimize/maximize)
+    {
+        UINT width = LOWORD(lParam);
+        UINT height = HIWORD(lParam);
+
+        if (wParam == SIZE_MINIMIZED) {
+            // Window minimized - render thread will detect this and sleep
+        }
+        else if (wParam == SIZE_RESTORED || wParam == SIZE_MAXIMIZED) {
+            // Window restored or maximized
+            self->width = static_cast<int>(width);
+            self->height = static_cast<int>(height);
+
+            // If not in modal loop, this was a programmatic resize
+            // (e.g., maximize button) - signal for swapchain recreation
+            if (!self->inModalLoop_) {
+                self->framebufferResized = true;
+            }
+        }
+    }
+    break;
     }
 
     return CallWindowProc(self->originalWndProc_, hwnd, msg, wParam, lParam);
@@ -53,7 +100,7 @@ void Window::setupWindowsHook() {
         );
 
     if (originalWndProc_) {
-        std::cout << "[OK] Windows modal loop hook installed" << std::endl;
+        std::cout << "[OK] Windows modal loop hook installed (render thread mode)" << std::endl;
     }
 }
 #endif
@@ -126,30 +173,29 @@ void Window::setRefreshCallback(std::function<void()> callback) {
 void Window::framebufferResizeCallback(GLFWwindow* glfwWin, int w, int h) {
     auto* data = reinterpret_cast<CallbackData*>(glfwGetWindowUserPointer(glfwWin));
     if (data && data->window) {
-        data->window->framebufferResized = true;
         data->window->width = w;
         data->window->height = h;
 
-        // Immediate refresh during resize
-        if (data->onRefresh) {
-            data->onRefresh();
-        }
+        // RENDER THREAD ARCHITECTURE:
+        // Don't call onRefresh here - just mark for resize
+        // Main loop will handle swapchain recreation
+        data->window->framebufferResized = true;
     }
 }
 
 void Window::windowRefreshCallback(GLFWwindow* glfwWin) {
     auto* data = reinterpret_cast<CallbackData*>(glfwGetWindowUserPointer(glfwWin));
     if (data && data->onRefresh) {
+        // RENDER THREAD ARCHITECTURE:
+        // This callback is now optional - render thread runs independently
+        // We keep it for signaling purposes but it shouldn't do heavy work
         data->onRefresh();
     }
 }
 
 void Window::windowPosCallback(GLFWwindow* glfwWin, int xpos, int ypos) {
     (void)xpos; (void)ypos;
-    auto* data = reinterpret_cast<CallbackData*>(glfwGetWindowUserPointer(glfwWin));
-    if (data && data->window && data->onRefresh) {
-        if (data->window->isInModalLoop()) {
-            data->onRefresh();
-        }
-    }
+    // RENDER THREAD ARCHITECTURE:
+    // Position changes don't require any special handling
+    // Render thread continues independently
 }
