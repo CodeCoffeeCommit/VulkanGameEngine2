@@ -28,6 +28,9 @@ private:
     void update(float deltaTime);
     void render();
 
+
+    void renderOneFrame();
+
     void handleResize();
     bool isMinimized() const;
     void processInput(float deltaTime);

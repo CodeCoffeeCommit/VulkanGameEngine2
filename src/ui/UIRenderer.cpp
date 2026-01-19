@@ -32,8 +32,10 @@ namespace libre::ui {
         if (fonts.init(context)) {
             bool fontsLoaded = fonts.loadFontFamily(FontSystem::DEFAULT_FONT,
                 "fonts/Inter-Regular.ttf",
-                "fonts/Inter-Bold.ttf",
                 "fonts/Inter-Light.ttf"
+                "fonts/Inter-Bold.ttf",
+                "fonts/Inter-Medium.ttf"
+                
             );
 
             if (!fontsLoaded) {

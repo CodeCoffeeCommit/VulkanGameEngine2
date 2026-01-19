@@ -27,11 +27,7 @@ void Application::run() {
     mainLoop();
 }
 
-// In Application.cpp
 
-
-
-// REPLACE your setupUI() function with this:
 
 void Application::setupUI() {
     std::cout << "[DEBUG] Setting up UI..." << std::endl;
@@ -39,44 +35,132 @@ void Application::setupUI() {
     using namespace libre::ui;
 
     uiManager = std::make_unique<UIManager>();
-
-    // CHANGED: Now passing window handle for DPI detection
     uiManager->init(vulkanContext.get(), swapChain->getRenderPass(), window->getHandle());
 
     // Setup callback for when window moves to different monitor (DPI change)
     glfwSetWindowContentScaleCallback(window->getHandle(),
         [](GLFWwindow* win, float xscale, float yscale) {
             libre::ui::UIScale::instance().onMonitorChanged(win);
-            // Scale factor is now updated - fonts may need reload
-            // UI will pick up new scale on next layout/draw
         }
     );
 
     // Create Menu Bar
     auto menuBar = std::make_unique<MenuBar>();
 
-    // File Menu
+    // File Menu - Using new MenuItem syntax with shortcuts
     menuBar->addMenu("File", {
-        MenuItem("New Project", []() { std::cout << "[Menu] New Project" << std::endl; }),
-        MenuItem("Open...", []() { std::cout << "[Menu] Open" << std::endl; }),
-        MenuItem("Save", []() { std::cout << "[Menu] Save" << std::endl; }),
+        MenuItem::Action("New Project", []() {
+            std::cout << "[Menu] New Project" << std::endl;
+        }, "Ctrl+N"),
+
+        MenuItem::Action("Open...", []() {
+            std::cout << "[Menu] Open" << std::endl;
+        }, "Ctrl+O"),
+
+        MenuItem::Action("Save", []() {
+            std::cout << "[Menu] Save" << std::endl;
+        }, "Ctrl+S"),
+
+        MenuItem::Action("Save As...", []() {
+            std::cout << "[Menu] Save As" << std::endl;
+        }, "Shift+Ctrl+S"),
+
         MenuItem::Separator(),
-        MenuItem("Exit", [this]() { glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE); })
+
+        MenuItem::Action("Import...", []() {
+            std::cout << "[Menu] Import" << std::endl;
+        }),
+
+        MenuItem::Action("Export...", []() {
+            std::cout << "[Menu] Export" << std::endl;
+        }),
+
+        MenuItem::Separator(),
+
+        MenuItem::Action("Exit", [this]() {
+            glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE);
+        }, "Alt+F4")
         });
 
     // Edit Menu
     menuBar->addMenu("Edit", {
-        MenuItem("Undo", []() { std::cout << "[Menu] Undo" << std::endl; }),
-        MenuItem("Redo", []() { std::cout << "[Menu] Redo" << std::endl; }),
+        MenuItem::Action("Undo", []() {
+            libre::Editor::instance().undo();
+            std::cout << "[Menu] Undo" << std::endl;
+        }, "Ctrl+Z"),
+
+        MenuItem::Action("Redo", []() {
+            libre::Editor::instance().redo();
+            std::cout << "[Menu] Redo" << std::endl;
+        }, "Shift+Ctrl+Z"),
+
         MenuItem::Separator(),
-        MenuItem("Preferences...", [this]() { openPreferencesWindow(); })
+
+        MenuItem::Action("Cut", []() {
+            std::cout << "[Menu] Cut" << std::endl;
+        }, "Ctrl+X"),
+
+        MenuItem::Action("Copy", []() {
+            std::cout << "[Menu] Copy" << std::endl;
+        }, "Ctrl+C"),
+
+        MenuItem::Action("Paste", []() {
+            std::cout << "[Menu] Paste" << std::endl;
+        }, "Ctrl+V"),
+
+        MenuItem::Separator(),
+
+        MenuItem::Action("Delete", []() {
+            libre::Editor::instance().deleteSelected();
+            std::cout << "[Menu] Delete" << std::endl;
+        }, "X"),
+
+        MenuItem::Separator(),
+
+        MenuItem::Action("Preferences...", [this]() {
+            openPreferencesWindow();
+        }, "Ctrl+,")
+        });
+
+    // View Menu (example with toggles)
+    menuBar->addMenu("View", {
+        MenuItem::Action("Reset View", []() {
+            std::cout << "[Menu] Reset View" << std::endl;
+        }, "Home"),
+
+        MenuItem::Separator(),
+
+        MenuItem::Action("Front", []() {
+            std::cout << "[Menu] Front View" << std::endl;
+        }, "Numpad 1"),
+
+        MenuItem::Action("Right", []() {
+            std::cout << "[Menu] Right View" << std::endl;
+        }, "Numpad 3"),
+
+        MenuItem::Action("Top", []() {
+            std::cout << "[Menu] Top View" << std::endl;
+        }, "Numpad 7"),
+
+        MenuItem::Separator(),
+
+        MenuItem::Action("Toggle Fullscreen", [this]() {
+            // Trigger fullscreen toggle
+            std::cout << "[Menu] Toggle Fullscreen" << std::endl;
+        }, "F11")
         });
 
     // Help Menu
     menuBar->addMenu("Help", {
-        MenuItem("Documentation", []() { std::cout << "[Menu] Documentation" << std::endl; }),
+        MenuItem::Action("Documentation", []() {
+            std::cout << "[Menu] Documentation" << std::endl;
+        }, "F1"),
+
         MenuItem::Separator(),
-        MenuItem("About", [this]() { openPreferencesWindow(); })
+
+        MenuItem::Action("About LibreDCC", [this]() {
+            openPreferencesWindow();  // Open to Credits tab later
+        })
         });
 
     uiManager->setMenuBar(std::move(menuBar));
@@ -109,6 +193,7 @@ void Application::openPreferencesWindow() {
         preferencesWindow->layout(preferencesWindow->bounds);
     }
 }
+
 void Application::init() {
     std::cout << "\n[INITIALIZATION]" << std::endl;
 
@@ -137,6 +222,10 @@ void Application::init() {
     createDefaultScene();
 
     lastFrameTime = std::chrono::steady_clock::now();
+
+    window->setRefreshCallback([this]() {
+        renderOneFrame();
+        });
 
     std::cout << "\n[OK] Application initialized successfully!" << std::endl;
     printControls();
@@ -211,19 +300,27 @@ void Application::handleResize() {
     // Renderer needs to know about new swap chain
     renderer->onSwapChainRecreated(swapChain.get());
 
+    uiManager->layout(static_cast<float>(width), static_cast<float>(height));
+
+
     framebufferResized = false;
 }
 
 void Application::mainLoop() {
     while (!window->shouldClose()) {
+
+        // Poll events first
+        window->pollEvents();
+
+        
+
         // Calculate delta time
         auto currentTime = std::chrono::steady_clock::now();
         deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
         lastFrameTime = currentTime;
         fps = 1.0f / deltaTime;
 
-        // Poll events first
-        window->pollEvents();
+        
 
         // FIXED: Check for resize BEFORE rendering
         if (window->wasResized() || framebufferResized) {
@@ -432,6 +529,30 @@ void Application::render() {
     if (!renderer->drawFrame(camera.get())) {
         framebufferResized = true;
     }
+}
+
+
+void Application::renderOneFrame() {
+    // Skip if minimized
+    if (isMinimized()) {
+        return;
+    }
+
+    // Check for resize
+    if (window->wasResized() || framebufferResized) {
+        window->resetResizeFlag();
+        handleResize();
+        return;
+    }
+
+    // Update timing
+    auto currentTime = std::chrono::steady_clock::now();
+    deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
+    lastFrameTime = currentTime;
+
+    // Update and render
+    update(deltaTime);
+    render();
 }
 
 void Application::syncECSToRenderer() {

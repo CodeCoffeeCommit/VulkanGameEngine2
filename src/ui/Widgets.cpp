@@ -305,118 +305,312 @@ namespace libre::ui {
         bounds = available;
         auto& theme = GetTheme();
 
-        // Calculate menu bounds
-        float x = bounds.x;
+        // Calculate menu header bounds
+        float x = bounds.x + theme.padding();
         for (auto& menu : menus_) {
-            Vec2 textSize = { menu.label.length() * 8.0f, theme.fontSize() };  // Approximate
-            menu.bounds = { x, bounds.y, textSize.x + theme.padding() * 2, bounds.h };
+            float textWidth = menu.label.length() * 7.0f;  // Approximate width
+            menu.bounds = {
+                x,
+                bounds.y,
+                textWidth + theme.padding() * 2,
+                bounds.h
+            };
             x += menu.bounds.w;
         }
     }
 
     void MenuBar::draw(UIRenderer& renderer) {
         auto& theme = GetTheme();
-        std::cout << "[DEBUG] MenuBar::draw bounds: x=" << bounds.x
-            << " y=" << bounds.y
-            << " w=" << bounds.w
-            << " h=" << bounds.h
-            << " menus=" << menus_.size() << std::endl;
 
-        // Background
+        // Draw menu bar background
         renderer.drawRect(bounds, theme.backgroundDark);
 
-        // Menu items
+        // Draw bottom border line
+        renderer.drawRect({ bounds.x, bounds.bottom() - 1, bounds.w, 1 }, theme.border);
+
+        // Draw menu headers
         for (int i = 0; i < static_cast<int>(menus_.size()); i++) {
             auto& menu = menus_[i];
-
             bool isOpen = (openMenuIndex_ == i);
+            bool isHovered = menu.hovered;
 
+            // Header background
             if (isOpen) {
                 renderer.drawRect(menu.bounds, theme.accent);
             }
+            else if (isHovered) {
+                renderer.drawRect(menu.bounds, theme.buttonHover);
+            }
 
-            renderer.drawText(menu.label,
-                menu.bounds.x + theme.padding(),
-                menu.bounds.y + (menu.bounds.h - theme.fontSize()) / 2,
-                theme.text, theme.fontSize());
+            // Header text
+            Color textColor = theme.text;
+            float textX = menu.bounds.x + theme.padding();
+            float textY = menu.bounds.y + (menu.bounds.h - theme.fontSize()) / 2;
+            renderer.drawText(menu.label, textX, textY, textColor, theme.fontSize());
+        }
 
-            // Draw dropdown if open
-            if (isOpen && !menu.items.empty()) {
-                Rect dropBounds = getMenuDropdownBounds(i);
-                renderer.drawRect(dropBounds, theme.dropdownBackground);
-                renderer.drawRectOutline(dropBounds, theme.border);
+        // Draw open dropdown
+        if (openMenuIndex_ >= 0 && openMenuIndex_ < static_cast<int>(menus_.size())) {
+            drawDropdown(renderer, openMenuIndex_);
+        }
+    }
 
-                float y = dropBounds.y;
-                for (int j = 0; j < static_cast<int>(menu.items.size()); j++) {
-                    auto& item = menu.items[j];
-                    Rect itemBounds = { dropBounds.x, y, dropBounds.w, theme.dropdownItemHeight() };
+    void MenuBar::drawDropdown(UIRenderer& renderer, int menuIndex) {
+        auto& theme = GetTheme();
+        auto& menu = menus_[menuIndex];
 
-                    if (item.separator) {
-                        float lineY = itemBounds.y + itemBounds.h / 2;
-                        renderer.drawRect({ itemBounds.x + 4, lineY, itemBounds.w - 8, 1 },
-                            theme.border);
-                    }
-                    else {
-                        if (j == hoveredItemIndex_) {
-                            renderer.drawRect(itemBounds, theme.dropdownItemHover);
-                        }
-                        renderer.drawText(item.label, itemBounds.x + theme.padding(),
-                            itemBounds.y + (itemBounds.h - theme.fontSize()) / 2,
-                            theme.text, theme.fontSize());
-                    }
+        // Calculate dropdown bounds
+        dropdownBounds_ = calculateDropdownBounds(menuIndex, renderer);
 
-                    y += theme.dropdownItemHeight();
-                }
+        // Draw dropdown shadow
+        Rect shadowBounds = {
+            dropdownBounds_.x + 3,
+            dropdownBounds_.y + 3,
+            dropdownBounds_.w,
+            dropdownBounds_.h
+        };
+        renderer.drawRect(shadowBounds, { 0, 0, 0, 0.3f });
+
+        // Draw dropdown background
+        renderer.drawRect(dropdownBounds_, theme.dropdownBackground);
+        renderer.drawRectOutline(dropdownBounds_, theme.border);
+
+        // Draw items
+        float y = dropdownBounds_.y + DROPDOWN_PADDING;
+        float itemHeight = theme.dropdownItemHeight();
+
+        for (int i = 0; i < static_cast<int>(menu.items.size()); i++) {
+            auto& item = menu.items[i];
+
+            if (item.separator) {
+                // Draw separator
+                float sepY = y + SEPARATOR_HEIGHT / 2;
+                renderer.drawRect({
+                    dropdownBounds_.x + theme.padding(),
+                    sepY,
+                    dropdownBounds_.w - theme.padding() * 2,
+                    1
+                    }, theme.border);
+                y += SEPARATOR_HEIGHT;
+            }
+            else {
+                Rect itemBounds = {
+                    dropdownBounds_.x,
+                    y,
+                    dropdownBounds_.w,
+                    itemHeight
+                };
+
+                bool isHovered = (i == hoveredItemIndex_);
+                drawMenuItem(renderer, item, itemBounds, isHovered, item.enabled);
+                y += itemHeight;
             }
         }
     }
 
+    void MenuBar::drawMenuItem(UIRenderer& renderer, const MenuItem& item,
+        const Rect& itemBounds, bool hovered, bool enabled) {
+        auto& theme = GetTheme();
+
+        // Hover highlight
+        if (hovered && enabled) {
+            renderer.drawRect(itemBounds, theme.accent);
+        }
+
+        // Text color
+        Color textColor = enabled ? theme.text : theme.textDim;
+        if (hovered && enabled) {
+            textColor = theme.text;  // Keep white on accent background
+        }
+
+        float x = itemBounds.x + theme.padding();
+        float textY = itemBounds.y + (itemBounds.h - theme.fontSize()) / 2;
+
+        // Checkbox/checkmark area
+        if (item.checkable) {
+            if (item.isChecked()) {
+                // Draw checkmark
+                float checkX = x + 2;
+                float checkY = itemBounds.y + (itemBounds.h - theme.fontSize()) / 2;
+                renderer.drawText("*", checkX, checkY, textColor, theme.fontSize());
+            }
+            x += CHECKBOX_WIDTH;
+        }
+        else {
+            // Icon area (placeholder for future)
+            x += ICON_WIDTH;
+        }
+
+        // Label
+        renderer.drawText(item.label, x, textY, textColor, theme.fontSize());
+
+        // Shortcut (right-aligned)
+        if (!item.shortcut.empty()) {
+            Vec2 shortcutSize = renderer.measureText(item.shortcut, theme.fontSize());
+            float shortcutX = itemBounds.right() - shortcutSize.x - theme.padding();
+            Color shortcutColor = enabled ? theme.textDim : theme.textDim;
+            renderer.drawText(item.shortcut, shortcutX, textY, shortcutColor, theme.fontSize());
+        }
+
+        // Submenu arrow
+        if (item.hasSubmenu()) {
+            float arrowX = itemBounds.right() - theme.padding() - 8;
+            renderer.drawText(">", arrowX, textY, textColor, theme.fontSize());
+        }
+    }
+
+    Rect MenuBar::calculateDropdownBounds(int menuIndex, UIRenderer& renderer) {
+        auto& theme = GetTheme();
+        auto& menu = menus_[menuIndex];
+
+        float width = calculateDropdownWidth(menu, renderer);
+        float height = DROPDOWN_PADDING * 2;  // Top and bottom padding
+
+        for (const auto& item : menu.items) {
+            if (item.separator) {
+                height += SEPARATOR_HEIGHT;
+            }
+            else {
+                height += theme.dropdownItemHeight();
+            }
+        }
+
+        return {
+            menu.bounds.x,           // Align with left edge of header
+            menu.bounds.bottom(),    // No gap - directly below header
+            width,
+            height
+        };
+    }
+
+    float MenuBar::calculateDropdownWidth(const Menu& menu, UIRenderer& renderer) {
+        auto& theme = GetTheme();
+        float maxWidth = MIN_DROPDOWN_WIDTH;
+
+        for (const auto& item : menu.items) {
+            if (item.separator) continue;
+
+            // Calculate width needed for this item
+            float itemWidth = theme.padding() * 2;  // Left and right padding
+            itemWidth += ICON_WIDTH;                 // Icon/checkbox area
+
+            Vec2 labelSize = renderer.measureText(item.label, theme.fontSize());
+            itemWidth += labelSize.x;
+
+            if (!item.shortcut.empty()) {
+                Vec2 shortcutSize = renderer.measureText(item.shortcut, theme.fontSize());
+                itemWidth += SHORTCUT_MIN_GAP + shortcutSize.x;
+            }
+
+            if (item.hasSubmenu()) {
+                itemWidth += SUBMENU_ARROW_WIDTH;
+            }
+
+            maxWidth = std::max(maxWidth, itemWidth);
+        }
+
+        return maxWidth;
+    }
+
     bool MenuBar::handleMouse(const MouseEvent& event) {
         auto& theme = GetTheme();
+        bool consumed = false;
+
+        // Reset hover states
+        for (auto& menu : menus_) {
+            menu.hovered = false;
+        }
 
         // Check menu headers
         for (int i = 0; i < static_cast<int>(menus_.size()); i++) {
             if (menus_[i].bounds.contains(event.x, event.y)) {
-                if (event.pressed && event.button == MouseButton::Left) {
-                    openMenuIndex_ = (openMenuIndex_ == i) ? -1 : i;
-                    return true;
-                }
-                return true;
-            }
-        }
+                menus_[i].hovered = true;
 
-        // Check open dropdown
-        if (openMenuIndex_ >= 0) {
-            Rect dropBounds = getMenuDropdownBounds(openMenuIndex_);
-
-            if (dropBounds.contains(event.x, event.y)) {
-                // Find hovered item
-                auto& menu = menus_[openMenuIndex_];
-                hoveredItemIndex_ = static_cast<int>((event.y - dropBounds.y) / theme.dropdownItemHeight());
-
-                if (hoveredItemIndex_ >= static_cast<int>(menu.items.size())) {
+                // If a dropdown is already open, switch to this one on hover
+                if (openMenuIndex_ >= 0 && openMenuIndex_ != i) {
+                    openMenuIndex_ = i;
                     hoveredItemIndex_ = -1;
                 }
 
-                if (event.pressed && event.button == MouseButton::Left && hoveredItemIndex_ >= 0) {
-                    auto& item = menu.items[hoveredItemIndex_];
-                    if (!item.separator && item.action) {
-                        item.action();
+                // Click to toggle dropdown
+                if (event.pressed && event.button == MouseButton::Left) {
+                    if (openMenuIndex_ == i) {
+                        openMenuIndex_ = -1;  // Close
                     }
-                    openMenuIndex_ = -1;
+                    else {
+                        openMenuIndex_ = i;   // Open
+                    }
+                    hoveredItemIndex_ = -1;
                     return true;
                 }
 
-                return true;
-            }
-
-            // Click outside closes menu
-            if (event.pressed) {
-                openMenuIndex_ = -1;
+                consumed = true;
             }
         }
 
-        return bounds.contains(event.x, event.y);
+        // Handle open dropdown
+        if (openMenuIndex_ >= 0) {
+            auto& menu = menus_[openMenuIndex_];
+
+            if (dropdownBounds_.contains(event.x, event.y)) {
+                // Find which item is hovered
+                float y = dropdownBounds_.y + DROPDOWN_PADDING;
+                float itemHeight = theme.dropdownItemHeight();
+                int newHoveredIndex = -1;
+
+                for (int i = 0; i < static_cast<int>(menu.items.size()); i++) {
+                    auto& item = menu.items[i];
+                    float h = item.separator ? SEPARATOR_HEIGHT : itemHeight;
+
+                    if (event.y >= y && event.y < y + h && !item.separator) {
+                        newHoveredIndex = i;
+                    }
+                    y += h;
+                }
+
+                hoveredItemIndex_ = newHoveredIndex;
+
+                // Click on item
+                if (event.pressed && event.button == MouseButton::Left &&
+                    hoveredItemIndex_ >= 0) {
+
+                    auto& item = menu.items[hoveredItemIndex_];
+                    if (item.enabled && !item.separator && !item.hasSubmenu()) {
+                        if (item.action) {
+                            item.action();
+                        }
+                        closeDropdown();
+                        return true;
+                    }
+                }
+
+                return true;  // Consume event even if no item clicked
+            }
+            else {
+                // Click outside dropdown - close it
+                if (event.pressed && event.button == MouseButton::Left) {
+                    // But not if clicking on menu bar
+                    if (!bounds.contains(event.x, event.y)) {
+                        closeDropdown();
+                    }
+                }
+                hoveredItemIndex_ = -1;
+            }
+        }
+
+        return consumed || bounds.contains(event.x, event.y);
+    }
+
+    bool MenuBar::handleKey(const KeyEvent& event) {
+        if (!event.pressed) return false;
+
+        // Escape closes dropdown
+        if (event.key == 256 && openMenuIndex_ >= 0) {  // GLFW_KEY_ESCAPE
+            closeDropdown();
+            return true;
+        }
+
+        return false;
     }
 
     void MenuBar::addMenu(const std::string& label, const std::vector<MenuItem>& items) {
@@ -424,25 +618,6 @@ namespace libre::ui {
         menu.label = label;
         menu.items = items;
         menus_.push_back(menu);
-    }
-
-    Rect MenuBar::getMenuDropdownBounds(int menuIndex) const {
-        if (menuIndex < 0 || menuIndex >= static_cast<int>(menus_.size())) {
-            return {};
-        }
-
-        auto& theme = GetTheme();
-        auto& menu = menus_[menuIndex];
-
-        float maxWidth = 150.0f;  // Minimum width
-        for (auto& item : menu.items) {
-            float w = item.label.length() * 8.0f + theme.padding() * 2;
-            if (w > maxWidth) maxWidth = w;
-        }
-
-        float height = menu.items.size() * theme.dropdownItemHeight();
-
-        return { menu.bounds.x, menu.bounds.bottom(), maxWidth, height };
     }
 
     // ============================================================================

@@ -117,7 +117,13 @@
     <ClCompile Include="src\ui\FontSystem.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
-    <ClCompile Include="Theme.cpp">
+    <ClCompile Include="src\ui\Theme.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="CallBackData.h">
+      <Filter>Header Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Window.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
   </ItemGroup>
@@ -200,9 +206,6 @@
     <ClInclude Include="src\ui\UIRenderer.h">
       <Filter>Header Files\ui</Filter>
     </ClInclude>
-    <ClInclude Include="src\ui\Theme.h">
-      <Filter>Header Files\ui</Filter>
-    </ClInclude>
     <ClInclude Include="src\ui\UI.h">
       <Filter>Header Files\ui</Filter>
     </ClInclude>
@@ -216,6 +219,12 @@
       <Filter>Header Files\ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\UIScale.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Theme.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Window.h">
       <Filter>Header Files\ui</Filter>
     </ClInclude>
   </ItemGroup>

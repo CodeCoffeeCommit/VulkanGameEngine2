@@ -130,6 +130,7 @@ glfw3dll.lib;freetype.lib
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CallBackData.h" />
     <ClCompile Include="ShaderCompiler.cpp" />
     <ClCompile Include="src\core\Application.cpp" />
     <ClCompile Include="src\core\Camera.cpp" />
@@ -148,11 +149,12 @@ glfw3dll.lib;freetype.lib
     <ClCompile Include="src\render\VulkanContext.cpp" />
     <ClCompile Include="src\ui\FontSystem.cpp" />
     <ClCompile Include="src\ui\PreferencesWindow.cpp" />
+    <ClCompile Include="src\ui\Theme.cpp" />
     <ClCompile Include="src\ui\UIRenderer.cpp" />
     <ClCompile Include="src\ui\UI.cpp" />
     <ClCompile Include="src\ui\Widgets.cpp" />
     <ClCompile Include="src\world\World.cpp" />
-    <ClCompile Include="Theme.cpp" />
+    <ClCompile Include="Window.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ShaderCompiler.h" />
@@ -177,8 +179,8 @@ glfw3dll.lib;freetype.lib
     <ClInclude Include="src\ui\Core.h" />
     <ClInclude Include="src\ui\FontSystem.h" />
     <ClInclude Include="src\ui\PreferencesWindow.h" />
-    <ClInclude Include="src\ui\UIRenderer.h" />
     <ClInclude Include="src\ui\Theme.h" />
+    <ClInclude Include="src\ui\UIRenderer.h" />
     <ClInclude Include="src\ui\UI.h" />
     <ClInclude Include="src\ui\UIScale.h" />
     <ClInclude Include="src\ui\Widgets.h" />
@@ -187,6 +189,7 @@ glfw3dll.lib;freetype.lib
     <ClInclude Include="src\world\RelationshipStore.h" />
     <ClInclude Include="src\world\Types.h" />
     <ClInclude Include="src\world\World.h" />
+    <ClInclude Include="Window.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
