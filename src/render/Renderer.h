@@ -61,6 +61,9 @@ public:
     Grid* getGrid() { return grid; }
     VulkanContext* getContext() { return context; }
 
+    // Get number of meshes in cache (for debugging)
+    size_t getMeshCacheSize() const { return meshCache.size(); }
+
 private:
     void createCommandPool();
     void createCommandBuffers();

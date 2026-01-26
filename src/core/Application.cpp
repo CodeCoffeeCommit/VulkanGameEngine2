@@ -1,19 +1,22 @@
 // src/core/Application.cpp
-// COMPLETE FILE - Replace your existing Application.cpp with this
-// INCLUDES DIAGNOSTIC LOGGING in prepareFrameData()
+// COMPLETE FILE - Fixed version with correct API usage
 
 #include "Application.h"
 #include "Editor.h"
 #include "FrameData.h"
 #include "../render/RenderThread.h"
+#include "../render/VulkanContext.h"  // Need full definition for vkDeviceWaitIdle
 #include "../render/Mesh.h"
 #include "../world/Primitives.h"
+#include "../components/CoreComponents.h"  // For MeshComponent, TransformComponent, etc.
 #include "../ui/UI.h"
 #include "../ui/Widgets.h"
 #include "../ui/UIScale.h"
+#include <unordered_set>
 
 #include <iostream>
 #include <algorithm>
+#include <thread>
 
 // Window settings
 static constexpr int WINDOW_WIDTH = 1600;
@@ -77,6 +80,10 @@ void Application::init() {
     // Create default scene
     createDefaultScene();
 
+    // FIX: Update transforms IMMEDIATELY after creating scene
+    // This ensures worldMatrix is computed before first frame
+    updateTransforms();
+
     // Setup UI (must be after render thread starts and Vulkan is initialized)
     setupUI();
 
@@ -85,8 +92,9 @@ void Application::init() {
     std::cout << "=== Initialization Complete ===\n" << std::endl;
 }
 
+
 // ============================================================================
-// UI SETUP
+// UI SETUP - FIXED VERSION
 // ============================================================================
 
 void Application::setupUI() {
@@ -94,7 +102,6 @@ void Application::setupUI() {
 
     using namespace libre::ui;
 
-    // Create UIManager
     uiManager = std::make_unique<UIManager>();
 
     // Wait for render thread to fully initialize Vulkan
@@ -110,7 +117,6 @@ void Application::setupUI() {
         }
     }
 
-    // Get Vulkan objects from render thread
     VulkanContext* ctx = renderThread->getVulkanContext();
     VkRenderPass renderPass = renderThread->getRenderPass();
 
@@ -124,8 +130,13 @@ void Application::setupUI() {
         return;
     }
 
-    // Initialize UIManager
+    // FIXED: Ensure GPU is idle before UI initialization (font atlas upload)
+    vkDeviceWaitIdle(ctx->getDevice());
+
     uiManager->init(ctx, renderPass, window->getHandle());
+
+    // Wait again after UI init
+    vkDeviceWaitIdle(ctx->getDevice());
 
     // Connect UI render callback to render thread
     renderThread->setUIRenderCallback([this](void* commandBuffer) {
@@ -141,6 +152,54 @@ void Application::setupUI() {
         });
     std::cout << "[DEBUG] UI render callback connected" << std::endl;
 
+    // ========================================================================
+    // CREATE MENU BAR - FIXED: Use correct API
+    // ========================================================================
+    auto menuBar = std::make_unique<MenuBar>();
+
+    // File Menu
+    menuBar->addMenu("File", {
+        MenuItem::Action("New", []() { std::cout << "New project\n"; }, "Ctrl+N"),
+        MenuItem::Action("Open...", []() { std::cout << "Open project\n"; }, "Ctrl+O"),
+        MenuItem::Action("Save", []() { std::cout << "Save project\n"; }, "Ctrl+S"),
+        MenuItem::Action("Save As...", []() { std::cout << "Save As\n"; }, "Ctrl+Shift+S"),
+        MenuItem::Separator(),
+        MenuItem::Action("Import...", []() { std::cout << "Import\n"; }),
+        MenuItem::Action("Export...", []() { std::cout << "Export\n"; }),
+        MenuItem::Separator(),
+        MenuItem::Action("Exit", [this]() { window->getHandle(); glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE); }, "Alt+F4")
+        });
+
+    // Edit Menu
+    menuBar->addMenu("Edit", {
+        MenuItem::Action("Undo", []() { std::cout << "Undo\n"; }, "Ctrl+Z"),
+        MenuItem::Action("Redo", []() { std::cout << "Redo\n"; }, "Ctrl+Y"),
+        MenuItem::Separator(),
+        MenuItem::Action("Cut", []() { std::cout << "Cut\n"; }, "Ctrl+X"),
+        MenuItem::Action("Copy", []() { std::cout << "Copy\n"; }, "Ctrl+C"),
+        MenuItem::Action("Paste", []() { std::cout << "Paste\n"; }, "Ctrl+V"),
+        MenuItem::Separator(),
+        MenuItem::Action("Preferences...", []() { std::cout << "Preferences\n"; })
+        });
+
+    // View Menu - FIXED: Use correct Camera methods
+    menuBar->addMenu("View", {
+        MenuItem::Toggle("Show Grid", &showGrid, "G"),
+        MenuItem::Toggle("Show Wireframe", &showWireframe, "Z"),
+        MenuItem::Separator(),
+        MenuItem::Action("Reset View", [this]() {
+            if (camera) camera->reset();
+            std::cout << "View reset\n";
+        }, "Home"),
+        MenuItem::Separator(),
+        MenuItem::Action("Front", [this]() { if (camera) camera->setFront(); }, "Numpad 1"),
+        MenuItem::Action("Right", [this]() { if (camera) camera->setRight(); }, "Numpad 3"),
+        MenuItem::Action("Top", [this]() { if (camera) camera->setTop(); }, "Numpad 7")
+        });
+
+    // FIXED: Use setMenuBar() instead of non-existent createWidget()
+    uiManager->setMenuBar(std::move(menuBar));
+
     // Initial layout
     int w, h;
     glfwGetFramebufferSize(window->getHandle(), &w, &h);
@@ -151,64 +210,33 @@ void Application::setupUI() {
         [](GLFWwindow* win, float xscale, float yscale) {
             std::cout << "[UI] Content scale changed: " << xscale << ", " << yscale << std::endl;
             libre::ui::UIScale::instance().onMonitorChanged(win);
-        }
-    );
+        });
 
     std::cout << "[DEBUG] UI setup complete" << std::endl;
 }
 
-void Application::cleanup() {
-    std::cout << "\n=== Cleaning Up ===" << std::endl;
+// ============================================================================
+// CLEANUP
+// ============================================================================
 
-    // Stop render thread first (this waits for GPU to finish)
+void Application::cleanup() {
+    std::cout << "\n=== Cleaning up Application ===" << std::endl;
+
     if (renderThread) {
         renderThread->stop();
         renderThread.reset();
     }
 
-    // Now safe to clean up other resources
-    uiManager.reset();
+    if (uiManager) {
+        uiManager->cleanup();
+        uiManager.reset();
+    }
+
     camera.reset();
     inputManager.reset();
     window.reset();
 
     std::cout << "=== Cleanup Complete ===" << std::endl;
-}
-
-void Application::createDefaultScene() {
-    std::cout << "[DEBUG] Creating default scene..." << std::endl;
-
-    auto& world = libre::Editor::instance().getWorld();
-
-    // Create a cube
-    auto cube = libre::Primitives::createCube(world, 2.0f, "DefaultCube");
-
-    // Create a sphere
-    auto sphere = libre::Primitives::createSphere(world, 1.0f, 32, 16, "Sphere");
-    if (auto* t = sphere.get<libre::TransformComponent>()) {
-        t->position = glm::vec3(3.0f, 0.0f, 0.0f);
-        t->dirty = true;
-    }
-
-    // Create a cylinder
-    auto cylinder = libre::Primitives::createCylinder(world, 0.5f, 2.0f, 32, "Cylinder");
-    if (auto* t = cylinder.get<libre::TransformComponent>()) {
-        t->position = glm::vec3(-3.0f, 0.0f, 0.0f);
-        t->dirty = true;
-    }
-
-    std::cout << "[OK] Default scene created with "
-        << world.getEntityCount() << " entities" << std::endl;
-}
-
-void Application::printControls() {
-    std::cout << "\n=== Controls ===" << std::endl;
-    std::cout << "Middle Mouse: Orbit camera" << std::endl;
-    std::cout << "Shift + Middle Mouse: Pan camera" << std::endl;
-    std::cout << "Scroll: Zoom" << std::endl;
-    std::cout << "Left Click: Select object" << std::endl;
-    std::cout << "ESC: Exit" << std::endl;
-    std::cout << "================\n" << std::endl;
 }
 
 // ============================================================================
@@ -217,6 +245,10 @@ void Application::printControls() {
 
 void Application::mainLoop() {
     std::cout << "[MainLoop] Starting main loop (render thread architecture)" << std::endl;
+
+    // Track which entities have pending uploads
+    std::unordered_set<libre::EntityID> pendingUploads;
+    uint64_t lastProcessedFrame = 0;
 
     while (!window->shouldClose()) {
         // ====================================================================
@@ -279,17 +311,43 @@ void Application::mainLoop() {
         update(deltaTime);
 
         // ====================================================================
-        // 7. PREPARE FRAME DATA
+        // 7. CHECK IF RENDER THREAD HAS PROCESSED OUR UPLOADS
+        // ====================================================================
+        uint64_t lastCompleted = renderThread->getLastCompletedFrame();
+        if (lastCompleted > lastProcessedFrame && !pendingUploads.empty()) {
+            // Render thread processed our frame - safe to clear gpuDirty
+            auto& world = libre::Editor::instance().getWorld();
+            for (libre::EntityID id : pendingUploads) {
+                if (auto* mesh = world.getComponent<libre::MeshComponent>(id)) {
+                    mesh->gpuDirty = false;
+                    if (lastProcessedFrame <= 10) {
+                        std::cout << "[MainLoop] Confirmed upload for entity " << id << std::endl;
+                    }
+                }
+            }
+            pendingUploads.clear();
+            lastProcessedFrame = lastCompleted;
+        }
+
+        // ====================================================================
+        // 8. PREPARE FRAME DATA
         // ====================================================================
         libre::FrameData frameData = prepareFrameData();
 
         // ====================================================================
-        // 8. SUBMIT TO RENDER THREAD (Non-blocking!)
+        // 9. TRACK ENTITIES WITH PENDING UPLOADS
+        // ====================================================================
+        for (const auto& upload : frameData.meshUploads) {
+            pendingUploads.insert(upload.entityId);
+        }
+
+        // ====================================================================
+        // 10. SUBMIT TO RENDER THREAD (Non-blocking!)
         // ====================================================================
         renderThread->submitFrameData(frameData);
 
         // ====================================================================
-        // 9. UPDATE INPUT STATE
+        // 11. UPDATE INPUT STATE
         // ====================================================================
         inputManager->update();
     }
@@ -298,14 +356,14 @@ void Application::mainLoop() {
 }
 
 // ============================================================================
-// PROCESS INPUT
+// PROCESS INPUT - FIXED: Use correct UIManager methods
 // ============================================================================
 
 void Application::processInput(float dt) {
     double mouseX = inputManager->getMouseX();
     double mouseY = inputManager->getMouseY();
 
-    // Forward mouse events to UI
+    // Forward mouse events to UI using correct method names
     if (uiManager) {
         uiManager->onMouseMove(static_cast<float>(mouseX), static_cast<float>(mouseY));
     }
@@ -344,7 +402,22 @@ void Application::processInput(float dt) {
     altHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_ALT) ||
         inputManager->isKeyPressed(GLFW_KEY_RIGHT_ALT);
 
-    // Middle mouse for camera
+    // Camera controls (only when UI is not capturing input)
+    // REMOVED: isMouseOverUI() doesn't exist - we'll handle this differently
+    handleCameraInput(dt, mouseX, mouseY);
+
+    // Handle keyboard shortcuts
+    handleKeyboardShortcuts();
+}
+
+// ============================================================================
+// CAMERA INPUT HANDLING
+// ============================================================================
+
+void Application::handleCameraInput(float dt, double mouseX, double mouseY) {
+    if (!camera) return;
+
+    // Track middle mouse button state
     if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_MIDDLE)) {
         middleMouseDown = true;
         lastMouseX = mouseX;
@@ -355,51 +428,74 @@ void Application::processInput(float dt) {
         middleMouseDown = false;
     }
 
+    // Middle mouse button for orbit/pan
     if (middleMouseDown) {
-        double deltaX = mouseX - lastMouseX;
-        double deltaY = mouseY - lastMouseY;
+        double dx = mouseX - lastMouseX;
+        double dy = mouseY - lastMouseY;
 
         if (shiftHeld) {
-            camera->pan(static_cast<float>(deltaX) * 0.01f,
-                static_cast<float>(-deltaY) * 0.01f);
+            // Pan
+            camera->pan(static_cast<float>(dx) * 0.01f, static_cast<float>(-dy) * 0.01f);
         }
         else {
-            camera->orbit(static_cast<float>(deltaX) * 0.5f,
-                static_cast<float>(deltaY) * 0.5f);
+            // Orbit
+            camera->orbit(static_cast<float>(dx) * 0.5f, static_cast<float>(dy) * 0.5f);
         }
 
         lastMouseX = mouseX;
         lastMouseY = mouseY;
     }
 
-    // Zoom (scroll wheel)
+    // Scroll wheel for zoom - FIXED: Use getScrollY() not getScrollDelta()
     double scrollY = inputManager->getScrollY();
     if (scrollY != 0.0) {
         camera->zoom(static_cast<float>(scrollY) * 0.5f);
+
+        // Also forward to UI
         if (uiManager) {
             uiManager->onMouseScroll(static_cast<float>(scrollY));
         }
     }
+}
 
-    // Keyboard shortcuts
-    if (inputManager->isKeyJustPressed(GLFW_KEY_ESCAPE)) {
-        glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE);
+// ============================================================================
+// KEYBOARD SHORTCUTS - FIXED: Use correct Camera methods
+// ============================================================================
+
+void Application::handleKeyboardShortcuts() {
+    // Toggle grid
+    if (inputManager->isKeyJustPressed(GLFW_KEY_G)) {
+        showGrid = !showGrid;
+        std::cout << "Grid: " << (showGrid ? "ON" : "OFF") << std::endl;
+    }
+
+    // Toggle wireframe
+    if (inputManager->isKeyJustPressed(GLFW_KEY_Z)) {
+        showWireframe = !showWireframe;
+        std::cout << "Wireframe: " << (showWireframe ? "ON" : "OFF") << std::endl;
+    }
+
+    // Reset view
+    if (inputManager->isKeyJustPressed(GLFW_KEY_HOME)) {
+        if (camera) camera->reset();
+    }
+
+    // View presets with numpad - FIXED: Use setFront/setRight/setTop methods
+    if (inputManager->isKeyJustPressed(GLFW_KEY_KP_1)) {
+        if (camera) camera->setFront();
+    }
+    if (inputManager->isKeyJustPressed(GLFW_KEY_KP_3)) {
+        if (camera) camera->setRight();
+    }
+    if (inputManager->isKeyJustPressed(GLFW_KEY_KP_7)) {
+        if (camera) camera->setTop();
     }
 
     // Forward key events to UI
     if (uiManager) {
-        const int keysToCheck[] = {
-            GLFW_KEY_BACKSPACE, GLFW_KEY_DELETE, GLFW_KEY_LEFT, GLFW_KEY_RIGHT,
-            GLFW_KEY_HOME, GLFW_KEY_END, GLFW_KEY_ENTER, GLFW_KEY_TAB
-        };
-
-        for (int key : keysToCheck) {
-            if (inputManager->isKeyJustPressed(key)) {
-                uiManager->onKey(key, true, shiftHeld, ctrlHeld, altHeld);
-            }
-            if (inputManager->isKeyJustReleased(key)) {
-                uiManager->onKey(key, false, shiftHeld, ctrlHeld, altHeld);
-            }
+        // Forward escape key
+        if (inputManager->isKeyJustPressed(GLFW_KEY_ESCAPE)) {
+            uiManager->onKey(GLFW_KEY_ESCAPE, true, shiftHeld, ctrlHeld, altHeld);
         }
     }
 }
@@ -411,6 +507,10 @@ void Application::processInput(float dt) {
 void Application::update(float dt) {
     updateTransforms();
 }
+
+// ============================================================================
+// UPDATE TRANSFORMS
+// ============================================================================
 
 void Application::updateTransforms() {
     auto& world = libre::Editor::instance().getWorld();
@@ -438,30 +538,29 @@ void Application::updateTransforms() {
 }
 
 // ============================================================================
-// PREPARE FRAME DATA - WITH DIAGNOSTIC LOGGING
+// PREPARE FRAME DATA - FIXED: Use correct World API
 // ============================================================================
 
 libre::FrameData Application::prepareFrameData() {
     libre::FrameData data;
-
-    // Frame info
-    data.frameNumber = frameNumber++;
+    static uint64_t frameCounter = 0;
+    data.frameNumber = ++frameCounter;
     data.deltaTime = deltaTime;
     data.totalTime = totalTime;
 
-    // Camera
-    data.camera.viewMatrix = camera->getViewMatrix();
-    data.camera.projectionMatrix = camera->getProjectionMatrix();
-    data.camera.position = camera->getPosition();
-    data.camera.forward = glm::normalize(camera->getTarget() - camera->getPosition());
-    data.camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
-    data.camera.fov = camera->fov;
-    data.camera.nearPlane = camera->nearPlane;
-    data.camera.farPlane = camera->farPlane;
+    int fw, fh;
+    glfwGetFramebufferSize(window->getHandle(), &fw, &fh);
 
-    int w, h;
-    glfwGetFramebufferSize(window->getHandle(), &w, &h);
-    data.camera.aspectRatio = static_cast<float>(w) / static_cast<float>(std::max(1, h));
+    // Camera data
+    if (camera) {
+        data.camera.viewMatrix = camera->getViewMatrix();
+        data.camera.projectionMatrix = camera->getProjectionMatrix();
+        data.camera.position = camera->getPosition();
+        data.camera.fov = camera->fov;
+        data.camera.nearPlane = camera->nearPlane;
+        data.camera.farPlane = camera->farPlane;
+        data.camera.aspectRatio = static_cast<float>(fw) / static_cast<float>(std::max(1, fh));
+    }
 
     // Lighting
     data.light.direction = glm::vec4(glm::normalize(glm::vec3(0.5f, 0.7f, 0.5f)), 0.0f);
@@ -470,24 +569,30 @@ libre::FrameData Application::prepareFrameData() {
     data.light.ambientStrength = 0.15f;
 
     // Viewport
-    data.viewport.width = static_cast<uint32_t>(std::max(1, w));
-    data.viewport.height = static_cast<uint32_t>(std::max(1, h));
-    data.viewport.showGrid = true;
+    data.viewport.width = static_cast<uint32_t>(std::max(1, fw));
+    data.viewport.height = static_cast<uint32_t>(std::max(1, fh));
+    data.viewport.showGrid = showGrid;
+    data.wireframeMode = showWireframe;
 
     // UI
-    data.ui.screenWidth = static_cast<float>(w);
-    data.ui.screenHeight = static_cast<float>(h);
+    data.ui.screenWidth = static_cast<float>(fw);
+    data.ui.screenHeight = static_cast<float>(fh);
 
     // ========================================================================
-    // COLLECT MESHES FROM ECS - WITH DIAGNOSTIC LOGGING
+    // COLLECT MESHES FROM ECS
     // ========================================================================
     auto& editor = libre::Editor::instance();
     auto& world = editor.getWorld();
+
+
+    // Get last completed frame to check if uploads were processed
+    uint64_t lastCompletedFrame = renderThread->getLastCompletedFrame();
 
     // Diagnostic counters
     size_t totalMeshComponents = 0;
     size_t meshesNeedingUpload = 0;
 
+    // Iterate over all entities with MeshComponent
     world.forEach<libre::MeshComponent>([&](libre::EntityID id, libre::MeshComponent& meshComp) {
         totalMeshComponents++;
 
@@ -497,12 +602,47 @@ libre::FrameData Application::prepareFrameData() {
         if (!transform) return;
         if (render && !render->visible) return;
 
-        // === DIAGNOSTIC: Print mesh component state (first 5 frames only) ===
-        if (data.frameNumber <= 5) {
+        // Diagnostic logging (first 10 frames)
+        if (data.frameNumber <= 10) {
             std::cout << "[prepareFrameData] Entity " << id
                 << " | gpuDirty=" << (meshComp.gpuDirty ? "TRUE" : "false")
                 << " | vertices=" << meshComp.vertices.size()
-                << " | indices=" << meshComp.indices.size() << std::endl;
+                << " | indices=" << meshComp.indices.size()
+                << " | worldMatrix[3]=" << transform->worldMatrix[3][0] << ","
+                << transform->worldMatrix[3][1] << "," << transform->worldMatrix[3][2]
+                << std::endl;
+        }
+
+
+
+        // If mesh needs GPU upload
+        if (meshComp.gpuDirty && !meshComp.vertices.empty()) {
+            meshesNeedingUpload++;
+
+            libre::MeshUploadData upload;
+            upload.entityId = id;
+            upload.vertices.reserve(meshComp.vertices.size());
+
+            // Convert MeshVertex to UploadVertex
+            for (const auto& v : meshComp.vertices) {
+                libre::UploadVertex uv;
+                uv.position = v.position;
+                uv.normal = v.normal;
+                uv.color = v.color;
+                upload.vertices.push_back(uv);
+            }
+            upload.indices = meshComp.indices;
+
+            data.meshUploads.push_back(std::move(upload));
+
+            // Mark as uploaded (will be set to false by render thread)
+            //remove -->  meshComp.gpuDirty = false;
+
+            if (data.frameNumber <= 5) {
+                std::cout << "[prepareFrameData] >>> QUEUED upload for entity "
+                    << id << " (" << meshComp.vertices.size() << " verts, "
+                    << meshComp.indices.size() << " indices)" << std::endl;
+            }
         }
 
         // Add to render list
@@ -511,49 +651,21 @@ libre::FrameData Application::prepareFrameData() {
         rm.modelMatrix = transform->worldMatrix;
         rm.entityId = id;
         rm.isSelected = editor.isSelected(id);
-        rm.color = rm.isSelected ?
-            glm::vec4(1.0f, 0.5f, 0.2f, 1.0f) :
-            glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
 
+        // Get color from render component or use default
         if (render) {
-            rm.color = glm::vec4(render->baseColor, 1.0f);
+            rm.color = glm::vec4(render->baseColor, render->opacity);
+        }
+        else {
+            rm.color = rm.isSelected ?
+                glm::vec4(1.0f, 0.6f, 0.2f, 1.0f) :  // Orange when selected
+                glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);   // Default gray
         }
 
         data.meshes.push_back(rm);
-
-        // Check if mesh needs GPU upload
-        if (meshComp.gpuDirty && !meshComp.vertices.empty()) {
-            meshesNeedingUpload++;
-
-            libre::MeshUploadData upload;
-            upload.entityId = id;
-
-            // Convert MeshVertex to UploadVertex (drop UV for now)
-            upload.vertices.reserve(meshComp.vertices.size());
-            for (const auto& mv : meshComp.vertices) {
-                libre::UploadVertex v;
-                v.position = mv.position;
-                v.normal = mv.normal;
-                v.color = mv.color;
-                upload.vertices.push_back(v);
-            }
-            upload.indices = meshComp.indices;
-
-            data.meshUploads.push_back(std::move(upload));
-
-            // === DIAGNOSTIC: Log upload ===
-            if (data.frameNumber <= 5) {
-                std::cout << "[prepareFrameData] >>> QUEUED upload for entity " << id
-                    << " (" << meshComp.vertices.size() << " verts, "
-                    << meshComp.indices.size() << " indices)" << std::endl;
-            }
-
-            // Mark as clean - will be uploaded this frame
-            meshComp.gpuDirty = false;
-        }
         });
 
-    // === DIAGNOSTIC: Summary (first 5 frames only) ===
+    // Diagnostic: Print frame summary (first 5 frames only)
     if (data.frameNumber <= 5) {
         std::cout << "[prepareFrameData] Frame " << data.frameNumber
             << " | MeshComponents: " << totalMeshComponents
@@ -565,7 +677,15 @@ libre::FrameData Application::prepareFrameData() {
 }
 
 // ============================================================================
-// HELPERS
+// SELECTION HANDLING
+// ============================================================================
+
+void Application::handleSelection() {
+    // Selection logic here
+}
+
+// ============================================================================
+// IS MINIMIZED
 // ============================================================================
 
 bool Application::isMinimized() const {
@@ -574,6 +694,49 @@ bool Application::isMinimized() const {
     return (w == 0 || h == 0);
 }
 
-void Application::handleSelection() {
-    // Placeholder for future selection implementation
+// ============================================================================
+// CREATE DEFAULT SCENE - FIXED: Use correct Primitives API
+// ============================================================================
+
+void Application::createDefaultScene() {
+    std::cout << "[DEBUG] Creating default scene..." << std::endl;
+
+    auto& world = libre::Editor::instance().getWorld();
+
+    // Create a cube
+    auto cube = libre::Primitives::createCube(world, 2.0f, "DefaultCube");
+
+    // Create a sphere at a different position
+    auto sphere = libre::Primitives::createSphere(world, 1.0f, 32, 16, "Sphere");
+    if (auto* t = sphere.get<libre::TransformComponent>()) {
+        t->position = glm::vec3(3.0f, 0.0f, 0.0f);
+        t->dirty = true;
+    }
+
+    // Create a cylinder at a different position
+    auto cylinder = libre::Primitives::createCylinder(world, 0.5f, 2.0f, 32, "Cylinder");
+    if (auto* t = cylinder.get<libre::TransformComponent>()) {
+        t->position = glm::vec3(-3.0f, 0.0f, 0.0f);
+        t->dirty = true;
+    }
+
+    std::cout << "[OK] Default scene created with "
+        << world.getEntityCount() << " entities" << std::endl;
+}
+
+// ============================================================================
+// PRINT CONTROLS
+// ============================================================================
+
+void Application::printControls() {
+    std::cout << "\n=== Controls ===" << std::endl;
+    std::cout << "Middle Mouse: Orbit camera" << std::endl;
+    std::cout << "Shift + Middle Mouse: Pan camera" << std::endl;
+    std::cout << "Scroll Wheel: Zoom" << std::endl;
+    std::cout << "G: Toggle grid" << std::endl;
+    std::cout << "Z: Toggle wireframe" << std::endl;
+    std::cout << "Home: Reset view" << std::endl;
+    std::cout << "Numpad 1/3/7: Front/Right/Top view" << std::endl;
+    std::cout << "Ctrl+Numpad: Opposite views" << std::endl;
+    std::cout << "================\n" << std::endl;
 }

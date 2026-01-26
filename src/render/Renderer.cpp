@@ -1,5 +1,5 @@
 // src/render/Renderer.cpp
-// COMPLETE FILE - Replace your existing Renderer.cpp with this
+// FIXED VERSION - Ensures font atlas is flushed BEFORE render pass
 
 #include "Renderer.h"
 #include "VulkanContext.h"
@@ -10,6 +10,7 @@
 #include "Mesh.h"
 #include "../core/Camera.h"
 #include "../core/FrameData.h"
+#include "../ui/FontSystem.h"  // For font atlas flushing before render pass
 #include <iostream>
 #include <stdexcept>
 #include <array>
@@ -209,7 +210,7 @@ Mesh* Renderer::getOrCreateMesh(uint64_t entityId, const void* vertexData, size_
 
     Mesh* mesh = new Mesh();
 
-    // Convert UploadVertex to Vertex (they have the same layout but being explicit is safer)
+    // Convert UploadVertex to Vertex
     const libre::UploadVertex* uploadVerts = static_cast<const libre::UploadVertex*>(vertexData);
 
     std::vector<Vertex> vertices;
@@ -221,17 +222,6 @@ Mesh* Renderer::getOrCreateMesh(uint64_t entityId, const void* vertexData, size_
         v.normal = uploadVerts[i].normal;
         v.color = uploadVerts[i].color;
         vertices.push_back(v);
-    }
-
-    // Debug output
-    if (!vertices.empty()) {
-        std::cout << "[Renderer] First vertex: pos("
-            << vertices[0].position.x << ", "
-            << vertices[0].position.y << ", "
-            << vertices[0].position.z << ") normal("
-            << vertices[0].normal.x << ", "
-            << vertices[0].normal.y << ", "
-            << vertices[0].normal.z << ")" << std::endl;
     }
 
     mesh->setVertices(vertices);
@@ -275,6 +265,13 @@ void Renderer::waitIdle() {
 bool Renderer::drawFrame(Camera* camera) {
     // Wait for previous frame with this index to complete
     vkWaitForFences(context->getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+    // ========================================================================
+    // FLUSH FONT ATLAS BEFORE ACQUIRING IMAGE (outside of any render pass)
+    // This is the FIX - font atlas upload must happen before render pass
+    // flushAtlas() returns early if not initialized or not dirty
+    // ========================================================================
+    libre::ui::FontSystem::instance().flushAtlas(VK_NULL_HANDLE);
 
     // Acquire next image
     uint32_t imageIndex;
@@ -434,6 +431,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 
     // ========================================
     // 3. Render UI (MUST be last - draws on top)
+    // Font atlas already flushed before render pass started
     // ========================================
     if (uiRenderCallback_) {
         uiRenderCallback_(commandBuffer);

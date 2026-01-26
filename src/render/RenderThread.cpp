@@ -1,9 +1,11 @@
 // src/render/RenderThread.cpp
+// COMPLETE FILE - Using unique_ptr for FrameData buffers
 
 #include "RenderThread.h"
 #include "VulkanContext.h"
 #include "SwapChain.h"
 #include "Renderer.h"
+#include "Mesh.h"
 #include "../core/Window.h"
 #include "../core/Camera.h"
 #include <iostream>
@@ -11,7 +13,11 @@
 
 namespace libre {
 
-    RenderThread::RenderThread() {}
+    RenderThread::RenderThread() {
+        // Initialize frame buffers as unique_ptr
+        frameBuffer0_ = std::make_unique<FrameData>();
+        frameBuffer1_ = std::make_unique<FrameData>();
+    }
 
     RenderThread::~RenderThread() {
         stop();
@@ -31,6 +37,11 @@ namespace libre {
         window_ = window;
         shouldStop_.store(false);
         hasError_.store(false);
+
+        // Reset buffer indices
+        writeBufferIndex_.store(0, std::memory_order_release);
+        readBufferIndex_.store(1, std::memory_order_release);
+        newFrameAvailable_.store(false, std::memory_order_release);
 
         thread_ = std::thread(&RenderThread::threadMain, this);
 
@@ -89,8 +100,19 @@ namespace libre {
     }
 
     void RenderThread::submitFrameData(const FrameData& data) {
+        // Get current write buffer index
         int writeIdx = writeBufferIndex_.load(std::memory_order_acquire);
-        frameBuffers_[writeIdx] = data;
+
+        // Copy data to write buffer using helper
+        getFrameBuffer(writeIdx) = data;
+
+        // Swap buffers: render thread will now read from this buffer
+        // and we'll write to the other one next time
+        int newWriteIdx = 1 - writeIdx;
+        writeBufferIndex_.store(newWriteIdx, std::memory_order_release);
+        readBufferIndex_.store(writeIdx, std::memory_order_release);
+
+        // Signal new frame available
         newFrameAvailable_.store(true, std::memory_order_release);
     }
 
@@ -150,18 +172,23 @@ namespace libre {
         std::cout << "[RenderThread] Running" << std::endl;
 
         while (!shouldStop_.load(std::memory_order_acquire)) {
+            // Check for swapchain recreation request
             if (swapchainRecreateRequested_.load(std::memory_order_acquire)) {
                 handleSwapchainRecreate();
                 swapchainRecreateRequested_.store(false, std::memory_order_release);
             }
 
+            // Check for new frame data
             if (newFrameAvailable_.load(std::memory_order_acquire)) {
-                int readIdx = writeBufferIndex_.load(std::memory_order_acquire);
-                writeBufferIndex_.store(1 - readIdx, std::memory_order_release);
+                // Read from the buffer that was just written
+                int readIdx = readBufferIndex_.load(std::memory_order_acquire);
                 newFrameAvailable_.store(false, std::memory_order_release);
-                renderFrame(frameBuffers_[readIdx]);
+
+                // Render the frame using helper
+                renderFrame(getFrameBuffer(readIdx));
             }
             else {
+                // No new frame, sleep briefly to avoid spinning
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
         }
@@ -253,28 +280,59 @@ namespace libre {
 
         renderer_->clearSubmissions();
 
-        // Upload new meshes
+        // === STEP 1: Process mesh uploads FIRST ===
         for (const auto& upload : frameData.meshUploads) {
-            if (!upload.vertices.empty()) {
-                renderer_->getOrCreateMesh(
+            if (!upload.vertices.empty() && !upload.indices.empty()) {
+                // Log uploads for first few frames
+                if (frameData.frameNumber <= 5) {
+                    std::cout << "[RenderThread] Uploading mesh for entity " << upload.entityId
+                        << " (" << upload.vertices.size() << " verts, "
+                        << upload.indices.size() << " indices)" << std::endl;
+                }
+
+                Mesh* mesh = renderer_->getOrCreateMesh(
                     upload.entityId,
                     upload.vertices.data(),
                     upload.vertices.size(),
                     upload.indices.data(),
                     upload.indices.size()
                 );
+
+                if (!mesh && frameData.frameNumber <= 5) {
+                    std::cerr << "[RenderThread] ERROR: Failed to create mesh " << upload.entityId << std::endl;
+                }
             }
         }
 
-        // Submit meshes for rendering
+        // === STEP 2: Submit meshes for rendering ===
+        size_t submitted = 0;
+        size_t notFound = 0;
+
         for (const auto& rm : frameData.meshes) {
-            auto* mesh = renderer_->getMeshFromCache(rm.entityId);
+            Mesh* mesh = renderer_->getMeshFromCache(rm.entityId);
             if (mesh) {
                 renderer_->submitMesh(mesh, rm.modelMatrix, glm::vec3(rm.color), rm.isSelected);
+                submitted++;
+            }
+            else {
+                notFound++;
+                if (frameData.frameNumber <= 10) {
+                    std::cerr << "[RenderThread] WARNING: Mesh " << rm.entityId
+                        << " not found in cache (frame " << frameData.frameNumber << ")" << std::endl;
+                }
             }
         }
 
-        // Setup UI callback (copy to avoid deadlock)
+        // Debug summary for first few frames
+        if (frameData.frameNumber <= 5) {
+            std::cout << "[RenderThread] Frame " << frameData.frameNumber
+                << " | Uploads: " << frameData.meshUploads.size()
+                << " | ToRender: " << frameData.meshes.size()
+                << " | Submitted: " << submitted
+                << " | NotFound: " << notFound << std::endl;
+        }
+
+        // === STEP 3: Setup UI callback ===
         std::function<void(void*)> uiCallback;
         {
             std::lock_guard<std::mutex> lock(callbackMutex_);
@@ -290,7 +348,7 @@ namespace libre {
             renderer_->setUIRenderCallback(nullptr);
         }
 
-        // Draw frame
+        // === STEP 4: Draw frame ===
         Camera tempCamera;
         tempCamera.setViewMatrix(frameData.camera.viewMatrix);
         tempCamera.setProjectionMatrix(frameData.camera.projectionMatrix);
@@ -305,7 +363,7 @@ namespace libre {
     }
 
     void RenderThread::syncECSToRenderer() {
-        // Handled in renderFrame via FrameData
+        // No longer needed - handled via FrameData
     }
 
 } // namespace libre

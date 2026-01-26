@@ -1,6 +1,3 @@
-// src/render/VulkanContext.h
-// COMPLETE FILE - Replace your existing VulkanContext.h with this
-
 #pragma once
 
 #define GLFW_INCLUDE_VULKAN
@@ -9,7 +6,6 @@
 #include <vector>
 #include <optional>
 #include <string>
-#include <set>
 #include "../core/Window.h"
 
 class VulkanContext {
@@ -28,14 +24,13 @@ public:
     VkSurfaceKHR getSurface() const { return surface; }
     VkQueue getGraphicsQueue() const { return graphicsQueue; }
     VkQueue getPresentQueue() const { return presentQueue; }
-
-    // NEW: Command pool for transfer operations (used by FontSystem, etc.)
     VkCommandPool getCommandPool() const { return commandPool; }
 
     uint32_t getGraphicsQueueFamily() const { return queueIndices.graphicsFamily.value(); }
     uint32_t getPresentQueueFamily() const { return queueIndices.presentFamily.value(); }
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
+    
 private:
     // Store window pointer
     Window* window;
@@ -46,7 +41,7 @@ private:
     void createSurface();
     void pickPhysicalDevice();
     void createLogicalDevice();
-    void createCommandPool();  // NEW
+    void createCommandPool();
 
     // Helper functions
     bool checkValidationLayerSupport();
@@ -78,7 +73,8 @@ private:
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
-    VkCommandPool commandPool = VK_NULL_HANDLE;  // NEW
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+
 
     VkQueue graphicsQueue = VK_NULL_HANDLE;
     VkQueue presentQueue = VK_NULL_HANDLE;

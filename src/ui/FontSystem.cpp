@@ -1,6 +1,4 @@
 // src/ui/FontSystem.cpp
-// SIMPLIFIED VERSION - Avoids MSVC Internal Compiler Error
-
 #include "FontSystem.h"
 #include "../render/VulkanContext.h"
 #include <iostream>
@@ -47,6 +45,7 @@ namespace libre::ui {
         VkDevice device = context_->getDevice();
         vkDeviceWaitIdle(device);
 
+        // Cleanup atlas
         if (sampler_) {
             vkDestroySampler(device, sampler_, nullptr);
             sampler_ = VK_NULL_HANDLE;
@@ -64,12 +63,10 @@ namespace libre::ui {
             atlasPage_.memory = VK_NULL_HANDLE;
         }
 
-        // Cleanup FreeType faces - simple iterator style
-        std::unordered_map<std::string, FontFamily>::iterator famIt;
-        for (famIt = families_.begin(); famIt != families_.end(); ++famIt) {
-            std::unordered_map<int, FT_Face>::iterator faceIt;
-            for (faceIt = famIt->second.faces.begin(); faceIt != famIt->second.faces.end(); ++faceIt) {
-                FT_Done_Face(faceIt->second);
+        // Cleanup FreeType faces
+        for (auto& [name, family] : families_) {
+            for (auto& [weight, face] : family.faces) {
+                FT_Done_Face(face);
             }
         }
         families_.clear();
@@ -84,17 +81,21 @@ namespace libre::ui {
         std::cout << "[OK] FontSystem shutdown\n";
     }
 
-    bool FontSystem::loadFont(const std::string& name, const std::string& path, FontWeight weight) {
+    bool FontSystem::loadFont(const std::string& name, const std::string& path,
+        FontWeight weight) {
+        // Create or get family
         FontFamily& family = families_[name];
         family.name = name;
 
         int weightKey = static_cast<int>(weight);
         family.weightPaths[weightKey] = path;
 
+        // Load the FreeType face
         FT_Face face;
         FT_Error err = FT_New_Face(ftLibrary_, path.c_str(), 0, &face);
         if (err) {
-            std::cerr << "[FontSystem] Failed to load font: " << path << " (error: " << err << ")\n";
+            std::cerr << "[FontSystem] Failed to load font: " << path
+                << " (error: " << err << ")\n";
             return false;
         }
 
@@ -118,22 +119,27 @@ namespace libre::ui {
     }
 
     FontFace* FontSystem::getFont(const std::string& name, int size, FontWeight weight) {
-        std::string key = name + "_" + std::to_string(size) + "_" + std::to_string(static_cast<int>(weight));
+        // Build cache key
+        std::string key = name + "_" + std::to_string(size) + "_" +
+            std::to_string(static_cast<int>(weight));
 
-        std::unordered_map<std::string, std::unique_ptr<FontFace>>::iterator cacheIt = fontCache_.find(key);
-        if (cacheIt != fontCache_.end()) {
-            return cacheIt->second.get();
+        // Check cache
+        auto it = fontCache_.find(key);
+        if (it != fontCache_.end()) {
+            return it->second.get();
         }
 
-        std::unordered_map<std::string, FontFamily>::iterator famIt = families_.find(name);
+        // Find the family and face
+        auto famIt = families_.find(name);
         if (famIt == families_.end()) {
             std::cerr << "[FontSystem] Font family not found: " << name << "\n";
             return nullptr;
         }
 
         int weightKey = static_cast<int>(weight);
-        std::unordered_map<int, FT_Face>::iterator faceIt = famIt->second.faces.find(weightKey);
+        auto faceIt = famIt->second.faces.find(weightKey);
         if (faceIt == famIt->second.faces.end()) {
+            // Fallback to regular weight
             faceIt = famIt->second.faces.find(static_cast<int>(FontWeight::Regular));
             if (faceIt == famIt->second.faces.end()) {
                 std::cerr << "[FontSystem] No face found for: " << name << "\n";
@@ -142,15 +148,19 @@ namespace libre::ui {
         }
 
         FT_Face ftFace = faceIt->second;
+
+        // Set pixel size
         FT_Set_Pixel_Sizes(ftFace, 0, size);
 
-        std::unique_ptr<FontFace> fontFace(new FontFace());
+        // Create FontFace
+        auto fontFace = std::make_unique<FontFace>();
         fontFace->name = name;
         fontFace->size = size;
         fontFace->lineHeight = ftFace->size->metrics.height / 64.0f;
         fontFace->ascender = ftFace->size->metrics.ascender / 64.0f;
         fontFace->descender = ftFace->size->metrics.descender / 64.0f;
 
+        // Pre-rasterize common ASCII glyphs (32-126)
         for (uint32_t cp = 32; cp <= 126; ++cp) {
             Glyph glyph;
             if (rasterizeGlyph(ftFace, cp, glyph)) {
@@ -166,12 +176,15 @@ namespace libre::ui {
     bool FontSystem::rasterizeGlyph(FT_Face face, uint32_t codepoint, Glyph& outGlyph) {
         FT_UInt glyphIndex = FT_Get_Char_Index(face, codepoint);
         if (glyphIndex == 0 && codepoint != 0) {
-            return false;
+            return false;  // Glyph not found
         }
 
+        // Use LIGHT hinting like Blender - only vertical adjustments
+        // This gives crisp tops/bottoms without distorting letter shapes
         FT_Error err = FT_Load_Glyph(face, glyphIndex, FT_LOAD_TARGET_LIGHT);
         if (err) return false;
 
+        // Render with light anti-aliasing for better quality
         err = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_LIGHT);
         if (err) return false;
 
@@ -180,8 +193,9 @@ namespace libre::ui {
 
         outGlyph.size = glm::ivec2(bitmap.width, bitmap.rows);
         outGlyph.bearing = glm::ivec2(slot->bitmap_left, slot->bitmap_top);
-        outGlyph.advance = slot->advance.x;
+        outGlyph.advance = slot->advance.x;  // Keep in 1/64 pixels for subpixel positioning
 
+        // Pack into atlas
         if (bitmap.width > 0 && bitmap.rows > 0) {
             if (!packGlyphIntoAtlas(bitmap.buffer, bitmap.width, bitmap.rows,
                 outGlyph.uvMin, outGlyph.uvMax)) {
@@ -189,6 +203,7 @@ namespace libre::ui {
             }
         }
         else {
+            // Whitespace character - no texture needed
             outGlyph.uvMin = outGlyph.uvMax = glm::vec2(0);
         }
 
@@ -200,15 +215,18 @@ namespace libre::ui {
         int paddedW = width + GLYPH_PADDING * 2;
         int paddedH = height + GLYPH_PADDING * 2;
 
+        // Check if we need to start a new row
         if (atlasPage_.currentX + paddedW > atlasPage_.width) {
             atlasPage_.currentX = 0;
             atlasPage_.currentY += atlasPage_.rowHeight + GLYPH_PADDING;
             atlasPage_.rowHeight = 0;
         }
 
+        // Check if we need to grow the atlas
         if (atlasPage_.currentY + paddedH > atlasPage_.height) {
             if (atlasPage_.height < MAX_ATLAS_SIZE) {
                 growAtlas();
+                // Retry after growing
                 return packGlyphIntoAtlas(bitmap, width, height, uvMin, uvMax);
             }
             else {
@@ -217,6 +235,7 @@ namespace libre::ui {
             }
         }
 
+        // Copy glyph bitmap to atlas (with padding)
         int destX = atlasPage_.currentX + GLYPH_PADDING;
         int destY = atlasPage_.currentY + GLYPH_PADDING;
 
@@ -228,11 +247,13 @@ namespace libre::ui {
             }
         }
 
+        // Calculate UVs
         uvMin.x = static_cast<float>(destX) / atlasPage_.width;
         uvMin.y = static_cast<float>(destY) / atlasPage_.height;
         uvMax.x = static_cast<float>(destX + width) / atlasPage_.width;
         uvMax.y = static_cast<float>(destY + height) / atlasPage_.height;
 
+        // Update cursor
         atlasPage_.currentX += paddedW;
         atlasPage_.rowHeight = std::max(atlasPage_.rowHeight, paddedH);
         atlasPage_.dirty = true;
@@ -250,12 +271,11 @@ namespace libre::ui {
         atlasPage_.currentY = 0;
         atlasPage_.rowHeight = 0;
 
+        // Create Vulkan image
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = static_cast<uint32_t>(width);
-        imageInfo.extent.height = static_cast<uint32_t>(height);
-        imageInfo.extent.depth = 1;
+        imageInfo.extent = { (uint32_t)width, (uint32_t)height, 1 };
         imageInfo.mipLevels = 1;
         imageInfo.arrayLayers = 1;
         imageInfo.format = VK_FORMAT_R8_UNORM;
@@ -270,13 +290,15 @@ namespace libre::ui {
             return false;
         }
 
+        // Allocate memory
         VkMemoryRequirements memReqs;
         vkGetImageMemoryRequirements(device, atlasPage_.image, &memReqs);
 
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = context_->findMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        allocInfo.memoryTypeIndex = context_->findMemoryType(
+            memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         if (vkAllocateMemory(device, &allocInfo, nullptr, &atlasPage_.memory) != VK_SUCCESS) {
             std::cerr << "[FontSystem] Failed to allocate atlas memory\n";
@@ -285,22 +307,20 @@ namespace libre::ui {
 
         vkBindImageMemory(device, atlasPage_.image, atlasPage_.memory, 0);
 
+        // Create image view
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = atlasPage_.image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = VK_FORMAT_R8_UNORM;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
+        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
         if (vkCreateImageView(device, &viewInfo, nullptr, &atlasPage_.view) != VK_SUCCESS) {
             std::cerr << "[FontSystem] Failed to create atlas image view\n";
             return false;
         }
 
+        // Create sampler with LINEAR filtering for smooth subpixel rendering
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -324,19 +344,21 @@ namespace libre::ui {
     }
 
     void FontSystem::growAtlas() {
-        int newSize = atlasPage_.height * 2;
-        if (newSize > MAX_ATLAS_SIZE) newSize = MAX_ATLAS_SIZE;
-
+        int newSize = std::min(atlasPage_.height * 2, MAX_ATLAS_SIZE);
         std::cout << "[FontSystem] Growing atlas to " << newSize << "x" << newSize << "\n";
 
         VkDevice device = context_->getDevice();
         vkDeviceWaitIdle(device);
 
+        // Cleanup old
         if (atlasPage_.view) vkDestroyImageView(device, atlasPage_.view, nullptr);
         if (atlasPage_.image) vkDestroyImage(device, atlasPage_.image, nullptr);
         if (atlasPage_.memory) vkFreeMemory(device, atlasPage_.memory, nullptr);
 
+        // Recreate with new size
         createAtlas(newSize, newSize);
+
+        // Clear cache to force re-rasterization
         fontCache_.clear();
     }
 
@@ -346,8 +368,10 @@ namespace libre::ui {
         atlasPage_.dirty = false;
     }
 
-    // FIXED: Uses separate command buffer (outside render pass)
-    void FontSystem::uploadAtlasToGPU(VkCommandBuffer) {
+    void FontSystem::uploadAtlasToGPU(VkCommandBuffer /*unused*/) {
+        // NOTE: We ignore the passed command buffer and create our own
+        // This allows us to upload outside of any render pass
+
         VkDevice device = context_->getDevice();
         VkQueue graphicsQueue = context_->getGraphicsQueue();
         VkCommandPool commandPool = context_->getCommandPool();
@@ -375,7 +399,8 @@ namespace libre::ui {
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = context_->findMemoryType(memReqs.memoryTypeBits,
+        allocInfo.memoryTypeIndex = context_->findMemoryType(
+            memReqs.memoryTypeBits,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
         if (vkAllocateMemory(device, &allocInfo, nullptr, &stagingMemory) != VK_SUCCESS) {
@@ -392,7 +417,7 @@ namespace libre::ui {
         memcpy(data, atlasPage_.pixels.data(), static_cast<size_t>(size));
         vkUnmapMemory(device, stagingMemory);
 
-        // Create transfer command buffer
+        // Create our own command buffer for the transfer
         VkCommandBufferAllocateInfo cmdAllocInfo{};
         cmdAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -408,7 +433,7 @@ namespace libre::ui {
 
         vkBeginCommandBuffer(transferCmd, &beginInfo);
 
-        // Transition to transfer dst
+        // Transition image to transfer destination
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -438,17 +463,17 @@ namespace libre::ui {
         region.imageSubresource.mipLevel = 0;
         region.imageSubresource.baseArrayLayer = 0;
         region.imageSubresource.layerCount = 1;
-        region.imageOffset.x = 0;
-        region.imageOffset.y = 0;
-        region.imageOffset.z = 0;
-        region.imageExtent.width = static_cast<uint32_t>(atlasPage_.width);
-        region.imageExtent.height = static_cast<uint32_t>(atlasPage_.height);
-        region.imageExtent.depth = 1;
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = {
+            static_cast<uint32_t>(atlasPage_.width),
+            static_cast<uint32_t>(atlasPage_.height),
+            1
+        };
 
         vkCmdCopyBufferToImage(transferCmd, stagingBuffer, atlasPage_.image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-        // Transition to shader read
+        // Transition image to shader read
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -468,40 +493,36 @@ namespace libre::ui {
         submitInfo.pCommandBuffers = &transferCmd;
 
         vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(graphicsQueue);
+        vkQueueWaitIdle(graphicsQueue);  // Wait for transfer to complete
 
         // Cleanup
         vkFreeCommandBuffers(device, commandPool, 1, &transferCmd);
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingMemory, nullptr);
-
-        std::cout << "[FontSystem] Atlas uploaded to GPU\n";
     }
 
     glm::vec2 FontSystem::measureText(const std::string& text, FontFace* font) {
-        if (!font) return glm::vec2(0.0f);
+        if (!font) return glm::vec2(0);
 
-        float width = 0.0f;
-        float maxWidth = 0.0f;
+        float width = 0;
+        float maxWidth = 0;
         int lines = 1;
 
-        for (size_t i = 0; i < text.size(); ++i) {
-            char c = text[i];
+        for (char c : text) {
             if (c == '\n') {
-                if (width > maxWidth) maxWidth = width;
-                width = 0.0f;
+                maxWidth = std::max(maxWidth, width);
+                width = 0;
                 lines++;
                 continue;
             }
 
-            uint32_t cp = static_cast<uint32_t>(static_cast<unsigned char>(c));
-            std::unordered_map<uint32_t, Glyph>::iterator it = font->glyphs.find(cp);
+            auto it = font->glyphs.find(static_cast<uint32_t>(c));
             if (it != font->glyphs.end()) {
                 width += it->second.advance / 64.0f;
             }
         }
 
-        if (width > maxWidth) maxWidth = width;
+        maxWidth = std::max(maxWidth, width);
         return glm::vec2(maxWidth, font->lineHeight * lines);
     }
 
@@ -511,7 +532,8 @@ namespace libre::ui {
         return measureText(text, font);
     }
 
-    std::vector<std::string> FontSystem::wrapText(const std::string& text, float maxWidth, FontFace* font) {
+    std::vector<std::string> FontSystem::wrapText(const std::string& text, float maxWidth,
+        FontFace* font) {
         std::vector<std::string> lines;
         if (!font || maxWidth <= 0) {
             lines.push_back(text);
@@ -521,7 +543,7 @@ namespace libre::ui {
         std::istringstream stream(text);
         std::string word;
         std::string currentLine;
-        float currentWidth = 0.0f;
+        float currentWidth = 0;
 
         while (stream >> word) {
             float wordWidth = measureText(word, font).x;
@@ -558,7 +580,7 @@ namespace libre::ui {
         FT_Vector delta;
         FT_Get_Kerning(face, leftIdx, rightIdx, FT_KERNING_DEFAULT, &delta);
 
-        return static_cast<int>(delta.x);
+        return delta.x;  // In 1/64 pixels
     }
 
 } // namespace libre::ui

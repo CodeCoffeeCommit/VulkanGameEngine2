@@ -1,5 +1,5 @@
 // src/core/Application.h
-// COMPLETE FILE - Replace your existing Application.h with this
+// COMPLETE FILE - Fixed version with all necessary members
 
 #pragma once
 
@@ -44,6 +44,12 @@ private:
     // Process Windows messages and input
     void processInput(float deltaTime);
 
+    // Handle camera input separately
+    void handleCameraInput(float dt, double mouseX, double mouseY);
+
+    // Handle keyboard shortcuts
+    void handleKeyboardShortcuts();
+
     // Update game/editor state
     void update(float deltaTime);
 
@@ -77,26 +83,31 @@ private:
     std::unique_ptr<libre::RenderThread> renderThread;
 
     // ========================================================================
-    // RESIZE STATE
-    // ========================================================================
-    std::atomic<bool> pendingResize{ false };
-
-    // ========================================================================
     // TIMING
     // ========================================================================
     std::chrono::steady_clock::time_point startTime;
     std::chrono::steady_clock::time_point lastFrameTime;
     float deltaTime = 0.0f;
     float totalTime = 0.0f;
-    uint64_t frameNumber = 0;
+
+    // ========================================================================
+    // RESIZE STATE
+    // ========================================================================
+    std::atomic<bool> pendingResize{ false };
 
     // ========================================================================
     // INPUT STATE
     // ========================================================================
-    bool middleMouseDown = false;
-    double lastMouseX = 0.0;
-    double lastMouseY = 0.0;
     bool shiftHeld = false;
     bool ctrlHeld = false;
     bool altHeld = false;
+    bool middleMouseDown = false;
+    double lastMouseX = 0.0;
+    double lastMouseY = 0.0;
+
+    // ========================================================================
+    // RENDER SETTINGS (Toggle states for menu items)
+    // ========================================================================
+    bool showGrid = true;
+    bool showWireframe = false;
 };
