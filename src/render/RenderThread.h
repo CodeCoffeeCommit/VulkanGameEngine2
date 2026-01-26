@@ -1,8 +1,8 @@
 // src/render/RenderThread.h
+// COMPLETE FILE - Replace your existing RenderThread.h with this
 
 #pragma once
 
-// CRITICAL: Include Vulkan BEFORE other headers for VkRenderPass type
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -12,6 +12,7 @@
 #include <functional>
 #include <memory>
 #include <chrono>
+#include <string>
 
 #include "../core/FrameData.h"
 

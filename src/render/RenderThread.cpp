@@ -180,7 +180,7 @@ namespace libre {
         while (!shouldStop_.load(std::memory_order_acquire)) {
             // Handle swapchain recreation
             if (swapchainRecreateRequested_.load(std::memory_order_acquire)) {
-                handleSwapchainRecreate();
+                recreateSwapchain();
                 swapchainRecreateRequested_.store(false, std::memory_order_release);
             }
 
@@ -219,8 +219,9 @@ namespace libre {
         try {
             std::cout << "[RenderThread] Initializing Vulkan..." << std::endl;
 
-            vulkanContext_ = std::make_unique<VulkanContext>();
-            vulkanContext_->init(window_->getHandle());
+            // VulkanContext takes Window* in constructor, then init() with no args
+            vulkanContext_ = std::make_unique<VulkanContext>(window_);
+            vulkanContext_->init();
 
             swapChain_ = std::make_unique<SwapChain>();
             swapChain_->init(vulkanContext_.get(), window_->getHandle());
@@ -244,6 +245,12 @@ namespace libre {
     }
 
     void RenderThread::cleanupVulkan() {
+        std::cout << "[RenderThread] Cleaning up Vulkan..." << std::endl;
+
+        if (vulkanContext_ && vulkanContext_->getDevice()) {
+            vkDeviceWaitIdle(vulkanContext_->getDevice());
+        }
+
         if (renderer_) {
             renderer_->cleanup();
             renderer_.reset();
@@ -258,9 +265,11 @@ namespace libre {
             vulkanContext_->cleanup();
             vulkanContext_.reset();
         }
+
+        std::cout << "[RenderThread] Vulkan cleanup complete" << std::endl;
     }
 
-    void RenderThread::handleSwapchainRecreate() {
+    void RenderThread::recreateSwapchain() {
         uint32_t newWidth = newSwapchainWidth_.load(std::memory_order_acquire);
         uint32_t newHeight = newSwapchainHeight_.load(std::memory_order_acquire);
 
@@ -320,17 +329,13 @@ namespace libre {
         }
 
         // =========================================================================
-        // STEP 3: Setup UI callback - FIXED: Avoid deadlock!
+        // STEP 3: Setup UI callback - Copy callback outside lock to avoid deadlock
         // =========================================================================
-        // Copy the callback OUTSIDE the lock scope to avoid deadlock.
-        // The previous version held callbackMutex_ while setting up a lambda that
-        // also tried to acquire callbackMutex_ when invoked.
         std::function<void(void*)> uiCallback;
         {
             std::lock_guard<std::mutex> lock(callbackMutex_);
             uiCallback = uiRenderCallback_;
         }
-        // Mutex is now released BEFORE we set up the renderer callback
 
         if (uiCallback) {
             renderer_->setUIRenderCallback([uiCallback](VkCommandBuffer cmd) {
