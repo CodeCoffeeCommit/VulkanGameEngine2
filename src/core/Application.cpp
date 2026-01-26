@@ -1,8 +1,5 @@
 // src/core/Application.cpp
-//
-// NEW ARCHITECTURE: Main thread never blocks on GPU.
-// All rendering happens on dedicated RenderThread.
-//
+// COMPLETE FILE - Fixed initialization order to prevent Vulkan threading issues
 
 #include "Application.h"
 #include "Editor.h"
@@ -16,6 +13,11 @@
 
 #include <iostream>
 #include <algorithm>
+
+// Window settings
+static constexpr int WINDOW_WIDTH = 1280;
+static constexpr int WINDOW_HEIGHT = 720;
+static constexpr const char* WINDOW_TITLE = "LibreDCC - 3D Viewport";
 
 Application::Application() {
     std::cout << "====================================" << std::endl;
@@ -34,7 +36,7 @@ void Application::run() {
 }
 
 // ============================================================================
-// INITIALIZATION
+// INITIALIZATION - FIXED ORDER
 // ============================================================================
 
 void Application::init() {
@@ -47,7 +49,7 @@ void Application::init() {
     // Create window (Main Thread owns this)
     window = std::make_unique<Window>(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE);
 
-    // Create input manager - takes Window* in constructor
+    // Create input manager
     inputManager = std::make_unique<InputManager>(window.get());
 
     // Initialize Editor singleton
@@ -57,101 +59,110 @@ void Application::init() {
     camera = std::make_unique<Camera>();
     camera->setAspectRatio(static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT));
 
-    // Create and start render thread
-    // ALL Vulkan initialization happens on the render thread
+    // ========================================================================
+    // CRITICAL: Create render thread but DON'T start it yet
+    // ========================================================================
     renderThread = std::make_unique<libre::RenderThread>();
+
+    // Start render thread - this initializes Vulkan
     if (!renderThread->start(window.get())) {
         throw std::runtime_error("Failed to start render thread!");
     }
 
-    // Setup window resize callback - just sets a flag, doesn't render
-    window->setRefreshCallback([this]() {
-        if (!window->isInModalLoop()) {
-            pendingResize.store(true, std::memory_order_release);
-        }
-        });
+    // ========================================================================
+    // CRITICAL: Setup UI AFTER render thread has initialized Vulkan
+    // but BEFORE we start the main loop (while render thread is idle)
+    // ========================================================================
+    std::cout << "[DEBUG] Setting up UI (render thread paused)..." << std::endl;
 
-    // Create default scene
-    createDefaultScene();
+    // Wait for any pending GPU work to complete before UI init
+    if (renderThread->getVulkanContext()) {
+        vkDeviceWaitIdle(renderThread->getVulkanContext()->getDevice());
+    }
 
-    // Setup UI (must be after render thread starts and Vulkan is initialized)
     setupUI();
+
+    // Wait again after UI setup to ensure all uploads complete
+    if (renderThread->getVulkanContext()) {
+        vkDeviceWaitIdle(renderThread->getVulkanContext()->getDevice());
+    }
+
+    std::cout << "[DEBUG] UI setup complete" << std::endl;
+
+    // ========================================================================
+    // Create default scene AFTER everything is initialized
+    // ========================================================================
+    createDefaultScene();
 
     printControls();
 
-    std::cout << "=== Initialization Complete ===\n" << std::endl;
+    std::cout << "\n=== Initialization Complete ===\n" << std::endl;
 }
 
-// ============================================================================
-// UI SETUP
-// ============================================================================
-
 void Application::setupUI() {
-    std::cout << "[DEBUG] Setting up UI..." << std::endl;
-
     using namespace libre::ui;
 
-    // Create UIManager
-    uiManager = std::make_unique<UIManager>();
-
-    // Wait for render thread to fully initialize Vulkan
-    std::cout << "[DEBUG] Waiting for render thread to initialize Vulkan..." << std::endl;
-
-    auto waitStart = std::chrono::steady_clock::now();
-    while (!renderThread->isRunning()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-        if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(10)) {
-            std::cerr << "[ERROR] Timeout waiting for render thread!" << std::endl;
-            return;
-        }
-    }
+    std::cout << "[DEBUG] Waiting for render thread Vulkan context..." << std::endl;
 
     // Get Vulkan objects from render thread
-    VulkanContext* ctx = renderThread->getVulkanContext();
+    VulkanContext* vulkanContext = renderThread->getVulkanContext();
     VkRenderPass renderPass = renderThread->getRenderPass();
 
-    if (!ctx) {
-        std::cerr << "[ERROR] VulkanContext is null!" << std::endl;
+    if (!vulkanContext || renderPass == VK_NULL_HANDLE) {
+        std::cerr << "[ERROR] Vulkan not ready for UI initialization!" << std::endl;
         return;
     }
 
-    if (renderPass == VK_NULL_HANDLE) {
-        std::cerr << "[ERROR] RenderPass is null!" << std::endl;
-        return;
-    }
+    // Create UI manager
+    uiManager = std::make_unique<UIManager>();
+    uiManager->init(vulkanContext, renderPass, window->getHandle());
 
-    // Initialize UIManager
-    uiManager->init(ctx, renderPass, window->getHandle());
+    // Create menu bar
+    auto menuBar = uiManager->createWidget<MenuBar>("mainMenuBar");
 
-    // Connect UI render callback to render thread
-    renderThread->setUIRenderCallback([this](void* commandBuffer) {
-        if (uiManager) {
-            uint32_t w, h;
-            renderThread->getSwapchainExtent(w, h);
+    // File menu
+    auto fileMenu = std::make_shared<Menu>("File");
+    fileMenu->addItem("New", "Ctrl+N", []() { std::cout << "New file\n"; });
+    fileMenu->addItem("Open...", "Ctrl+O", []() { std::cout << "Open file\n"; });
+    fileMenu->addItem("Save", "Ctrl+S", []() { std::cout << "Save file\n"; });
+    fileMenu->addSeparator();
+    fileMenu->addItem("Exit", "Alt+F4", []() { std::cout << "Exit\n"; });
+    menuBar->addMenu(fileMenu);
 
-            if (w > 0 && h > 0) {
-                uiManager->layout(static_cast<float>(w), static_cast<float>(h));
-                uiManager->render(static_cast<VkCommandBuffer>(commandBuffer));
-            }
-        }
-        });
-    std::cout << "[DEBUG] UI render callback connected" << std::endl;
+    // Edit menu
+    auto editMenu = std::make_shared<Menu>("Edit");
+    editMenu->addItem("Undo", "Ctrl+Z", []() { std::cout << "Undo\n"; });
+    editMenu->addItem("Redo", "Ctrl+Y", []() { std::cout << "Redo\n"; });
+    editMenu->addSeparator();
+    editMenu->addItem("Cut", "Ctrl+X", []() { std::cout << "Cut\n"; });
+    editMenu->addItem("Copy", "Ctrl+C", []() { std::cout << "Copy\n"; });
+    editMenu->addItem("Paste", "Ctrl+V", []() { std::cout << "Paste\n"; });
+    menuBar->addMenu(editMenu);
+
+    // View menu
+    auto viewMenu = std::make_shared<Menu>("View");
+    viewMenu->addItem("Reset View", "Home", []() { std::cout << "Reset view\n"; });
+    viewMenu->addItem("Frame Selected", "F", []() { std::cout << "Frame selected\n"; });
+    viewMenu->addSeparator();
+    viewMenu->addItem("Wireframe", "Z", []() { std::cout << "Toggle wireframe\n"; });
+    viewMenu->addItem("Solid", "", []() { std::cout << "Solid mode\n"; });
+    menuBar->addMenu(viewMenu);
 
     // Initial layout
     int w, h;
     glfwGetFramebufferSize(window->getHandle(), &w, &h);
     uiManager->layout(static_cast<float>(w), static_cast<float>(h));
 
-    // Setup DPI change callback
-    glfwSetWindowContentScaleCallback(window->getHandle(),
-        [](GLFWwindow* win, float xscale, float yscale) {
-            std::cout << "[UI] Content scale changed: " << xscale << ", " << yscale << std::endl;
-            libre::ui::UIScale::instance().onMonitorChanged(win);
+    // Connect UI render callback to render thread
+    renderThread->setUIRenderCallback(
+        [this](void* commandBuffer) {
+            if (uiManager) {
+                uiManager->render(static_cast<VkCommandBuffer>(commandBuffer));
+            }
         }
     );
 
-    std::cout << "[DEBUG] UI setup complete" << std::endl;
+    std::cout << "[DEBUG] UI render callback connected" << std::endl;
 }
 
 void Application::cleanup() {
@@ -222,31 +233,22 @@ void Application::mainLoop() {
         window->pollEvents();
 
         // ====================================================================
-        // 2. HANDLE RESIZE COMPLETION
+        // 2. CHECK FOR RESIZE COMPLETION
         // ====================================================================
-        if (!window->isInModalLoop() &&
-            (pendingResize.load(std::memory_order_acquire) || window->wasResized())) {
-
+        if (window->wasResized()) {
             int w, h;
             glfwGetFramebufferSize(window->getHandle(), &w, &h);
 
             if (w > 0 && h > 0) {
+                std::cout << "[MainLoop] Resize complete: " << w << "x" << h << std::endl;
+                renderThread->requestSwapchainRecreate(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
                 camera->setAspectRatio(static_cast<float>(w) / static_cast<float>(h));
-
-                renderThread->requestSwapchainRecreate(
-                    static_cast<uint32_t>(w),
-                    static_cast<uint32_t>(h)
-                );
 
                 if (uiManager) {
                     uiManager->layout(static_cast<float>(w), static_cast<float>(h));
                 }
-
-                std::cout << "[MainLoop] Resize complete: " << w << "x" << h << std::endl;
             }
-
-            window->resetResizeFlag();
-            pendingResize.store(false, std::memory_order_release);
+            window->resetResizedFlag();
         }
 
         // ====================================================================
@@ -260,10 +262,10 @@ void Application::mainLoop() {
         // ====================================================================
         // 4. CALCULATE DELTA TIME
         // ====================================================================
-        auto currentTime = std::chrono::steady_clock::now();
-        deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
-        lastFrameTime = currentTime;
-        totalTime = std::chrono::duration<float>(currentTime - startTime).count();
+        auto now = std::chrono::steady_clock::now();
+        deltaTime = std::chrono::duration<float>(now - lastFrameTime).count();
+        lastFrameTime = now;
+        totalTime = std::chrono::duration<float>(now - startTime).count();
 
         // ====================================================================
         // 5. PROCESS INPUT
@@ -271,18 +273,27 @@ void Application::mainLoop() {
         processInput(deltaTime);
 
         // ====================================================================
-        // 6. UPDATE GAME/EDITOR STATE
+        // 6. UPDATE
         // ====================================================================
         update(deltaTime);
 
         // ====================================================================
-        // 7. PREPARE FRAME DATA
+        // 7. UPDATE UI
         // ====================================================================
-        libre::FrameData frameData = prepareFrameData();
+        if (uiManager) {
+            float mx = static_cast<float>(inputManager->getMouseX());
+            float my = static_cast<float>(inputManager->getMouseY());
+            bool leftDown = inputManager->isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT);
+            bool leftClicked = inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_LEFT);
+
+            uiManager->handleInput(mx, my, leftDown, leftClicked);
+            uiManager->update(deltaTime);
+        }
 
         // ====================================================================
-        // 8. SUBMIT TO RENDER THREAD (Non-blocking!)
+        // 8. PREPARE AND SUBMIT FRAME DATA
         // ====================================================================
+        libre::FrameData frameData = prepareFrameData();
         renderThread->submitFrameData(frameData);
 
         // ====================================================================
@@ -295,104 +306,45 @@ void Application::mainLoop() {
 }
 
 // ============================================================================
-// PROCESS INPUT
+// INPUT PROCESSING
 // ============================================================================
 
 void Application::processInput(float dt) {
-    double mouseX = inputManager->getMouseX();
-    double mouseY = inputManager->getMouseY();
-
-    // Forward mouse events to UI
-    if (uiManager) {
-        uiManager->onMouseMove(static_cast<float>(mouseX), static_cast<float>(mouseY));
+    // ESC to close
+    if (inputManager->isKeyPressed(GLFW_KEY_ESCAPE)) {
+        glfwSetWindowShouldClose(window->getHandle(), true);
     }
 
-    // Left mouse button
-    if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_LEFT)) {
-        if (uiManager) {
-            uiManager->onMouseButton(libre::ui::MouseButton::Left, true);
-        }
-        // Selection handling would go here when implemented
-    }
-
-    if (inputManager->isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_LEFT)) {
-        if (uiManager) {
-            uiManager->onMouseButton(libre::ui::MouseButton::Left, false);
-        }
-    }
-
-    // Right mouse button
-    if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
-        if (uiManager) {
-            uiManager->onMouseButton(libre::ui::MouseButton::Right, true);
-        }
-    }
-
-    if (inputManager->isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_RIGHT)) {
-        if (uiManager) {
-            uiManager->onMouseButton(libre::ui::MouseButton::Right, false);
-        }
-    }
-
-    // Modifier keys
-    shiftHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_SHIFT) ||
+    // Camera controls
+    bool middleMouse = inputManager->isMouseButtonPressed(GLFW_MOUSE_BUTTON_MIDDLE);
+    bool shiftHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_SHIFT) ||
         inputManager->isKeyPressed(GLFW_KEY_RIGHT_SHIFT);
-    ctrlHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_CONTROL) ||
-        inputManager->isKeyPressed(GLFW_KEY_RIGHT_CONTROL);
-    altHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_ALT) ||
-        inputManager->isKeyPressed(GLFW_KEY_RIGHT_ALT);
 
-    // Middle mouse for camera
-    if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_MIDDLE)) {
-        middleMouseDown = true;
-        lastMouseX = mouseX;
-        lastMouseY = mouseY;
-    }
-
-    if (inputManager->isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_MIDDLE)) {
-        middleMouseDown = false;
-    }
-
-    if (middleMouseDown) {
-        double deltaX = mouseX - lastMouseX;
-        double deltaY = mouseY - lastMouseY;
+    if (middleMouse) {
+        double dx = inputManager->getMouseX() - lastMouseX;
+        double dy = inputManager->getMouseY() - lastMouseY;
 
         if (shiftHeld) {
-            camera->pan(static_cast<float>(deltaX) * 0.01f,
-                static_cast<float>(-deltaY) * 0.01f);
+            camera->pan(static_cast<float>(-dx) * 0.01f, static_cast<float>(dy) * 0.01f);
         }
         else {
-            camera->orbit(static_cast<float>(deltaX) * 0.5f,
-                static_cast<float>(deltaY) * 0.5f);
+            camera->orbit(static_cast<float>(dx) * 0.5f, static_cast<float>(dy) * 0.5f);
         }
-
-        lastMouseX = mouseX;
-        lastMouseY = mouseY;
     }
 
-    // Scroll wheel - zoom
+    lastMouseX = inputManager->getMouseX();
+    lastMouseY = inputManager->getMouseY();
+
+    // Scroll zoom
     double scrollY = inputManager->getScrollY();
     if (scrollY != 0.0) {
-        if (uiManager) {
-            uiManager->onMouseScroll(static_cast<float>(scrollY));
-        }
         camera->zoom(static_cast<float>(scrollY) * 0.5f);
     }
 
-    // Keyboard shortcuts
-    if (inputManager->isKeyJustPressed(GLFW_KEY_ESCAPE)) {
-        glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE);
-    }
-
-    // Forward keyboard events to UI
-    if (uiManager) {
-        for (int key = GLFW_KEY_SPACE; key <= GLFW_KEY_LAST; key++) {
-            if (inputManager->isKeyJustPressed(key)) {
-                uiManager->onKey(key, true, shiftHeld, ctrlHeld, altHeld);
-            }
-            if (inputManager->isKeyJustReleased(key)) {
-                uiManager->onKey(key, false, shiftHeld, ctrlHeld, altHeld);
-            }
+    // Selection
+    if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+        if (!uiManager || !uiManager->isMouseOverUI()) {
+            handleSelection();
         }
     }
 }
@@ -431,7 +383,7 @@ void Application::updateTransforms() {
 }
 
 // ============================================================================
-// PREPARE FRAME DATA
+// PREPARE FRAME DATA - WITH DIAGNOSTIC LOGGING
 // ============================================================================
 
 libre::FrameData Application::prepareFrameData() {
@@ -471,16 +423,32 @@ libre::FrameData Application::prepareFrameData() {
     data.ui.screenWidth = static_cast<float>(w);
     data.ui.screenHeight = static_cast<float>(h);
 
-    // Collect meshes from ECS
+    // ========================================================================
+    // COLLECT MESHES FROM ECS - WITH DIAGNOSTIC LOGGING
+    // ========================================================================
     auto& editor = libre::Editor::instance();
     auto& world = editor.getWorld();
 
+    // Diagnostic counters
+    size_t totalMeshComponents = 0;
+    size_t meshesNeedingUpload = 0;
+
     world.forEach<libre::MeshComponent>([&](libre::EntityID id, libre::MeshComponent& meshComp) {
+        totalMeshComponents++;
+
         auto* transform = world.getComponent<libre::TransformComponent>(id);
         auto* render = world.getComponent<libre::RenderComponent>(id);
 
         if (!transform) return;
         if (render && !render->visible) return;
+
+        // === DIAGNOSTIC: Print mesh component state (first 5 frames only) ===
+        if (data.frameNumber <= 5) {
+            std::cout << "[prepareFrameData] Entity " << id
+                << " | gpuDirty=" << (meshComp.gpuDirty ? "TRUE" : "false")
+                << " | vertices=" << meshComp.vertices.size()
+                << " | indices=" << meshComp.indices.size() << std::endl;
+        }
 
         // Add to render list
         libre::RenderableMesh rm;
@@ -500,6 +468,8 @@ libre::FrameData Application::prepareFrameData() {
 
         // Check if mesh needs GPU upload
         if (meshComp.gpuDirty && !meshComp.vertices.empty()) {
+            meshesNeedingUpload++;
+
             libre::MeshUploadData upload;
             upload.entityId = id;
 
@@ -516,10 +486,25 @@ libre::FrameData Application::prepareFrameData() {
 
             data.meshUploads.push_back(std::move(upload));
 
+            // === DIAGNOSTIC: Log upload ===
+            if (data.frameNumber <= 5) {
+                std::cout << "[prepareFrameData] >>> QUEUED upload for entity " << id
+                    << " (" << meshComp.vertices.size() << " verts, "
+                    << meshComp.indices.size() << " indices)" << std::endl;
+            }
+
             // Mark as clean - will be uploaded this frame
             meshComp.gpuDirty = false;
         }
         });
+
+    // === DIAGNOSTIC: Summary (first 5 frames only) ===
+    if (data.frameNumber <= 5) {
+        std::cout << "[prepareFrameData] Frame " << data.frameNumber
+            << " | MeshComponents: " << totalMeshComponents
+            << " | NeedUpload: " << meshesNeedingUpload
+            << " | Renderables: " << data.meshes.size() << std::endl;
+    }
 
     return data;
 }
@@ -532,4 +517,8 @@ bool Application::isMinimized() const {
     int w, h;
     glfwGetFramebufferSize(window->getHandle(), &w, &h);
     return (w == 0 || h == 0);
+}
+
+void Application::handleSelection() {
+    // Placeholder for future selection implementation
 }

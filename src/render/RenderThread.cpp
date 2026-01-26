@@ -1,6 +1,5 @@
 // src/render/RenderThread.cpp
-// COMPLETE FILE - Replace your existing RenderThread.cpp with this
-// FIXED VERSION - Corrects double-buffer swap logic and adds diagnostic logging
+// COMPLETE FILE - Using unique_ptr for FrameData buffers
 
 #include "RenderThread.h"
 #include "VulkanContext.h"
@@ -15,9 +14,9 @@
 namespace libre {
 
     RenderThread::RenderThread() {
-        // Initialize both frame buffers
-        frameBuffers_[0] = std::make_unique<FrameData>();
-        frameBuffers_[1] = std::make_unique<FrameData>();
+        // Initialize frame buffers as unique_ptr
+        frameBuffer0_ = std::make_unique<FrameData>();
+        frameBuffer1_ = std::make_unique<FrameData>();
     }
 
     RenderThread::~RenderThread() {
@@ -104,8 +103,8 @@ namespace libre {
         // Get current write buffer index
         int writeIdx = writeBufferIndex_.load(std::memory_order_acquire);
 
-        // Copy data to write buffer
-        *frameBuffers_[writeIdx] = data;
+        // Copy data to write buffer using helper
+        getFrameBuffer(writeIdx) = data;
 
         // Swap buffers: render thread will now read from this buffer
         // and we'll write to the other one next time
@@ -185,8 +184,8 @@ namespace libre {
                 int readIdx = readBufferIndex_.load(std::memory_order_acquire);
                 newFrameAvailable_.store(false, std::memory_order_release);
 
-                // Render the frame
-                *renderFrame(frameBuffers_[readIdx]);
+                // Render the frame using helper
+                renderFrame(getFrameBuffer(readIdx));
             }
             else {
                 // No new frame, sleep briefly to avoid spinning

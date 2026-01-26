@@ -1,5 +1,5 @@
 // src/render/RenderThread.h
-// COMPLETE FILE - Replace your existing RenderThread.h with this
+// COMPLETE FILE - Using unique_ptr for FrameData buffers
 
 #pragma once
 
@@ -88,8 +88,9 @@ namespace libre {
         std::string errorMessage_;
         mutable std::mutex errorMutex_;
 
-        // Frame data double buffer
-        std::unique_ptr<FrameData> frameBuffers_[2];
+        // Frame data double buffer - using unique_ptr to avoid MSVC template ICE
+        std::unique_ptr<FrameData> frameBuffer0_;
+        std::unique_ptr<FrameData> frameBuffer1_;
         std::atomic<int> writeBufferIndex_{ 0 };
         std::atomic<int> readBufferIndex_{ 1 };
         std::atomic<bool> newFrameAvailable_{ false };
@@ -117,6 +118,14 @@ namespace libre {
         std::atomic<float> currentFPS_{ 0.0f };
         uint64_t frameCount_ = 0;
         std::chrono::steady_clock::time_point lastFPSUpdate_;
+
+        // Helper to get frame buffer by index
+        FrameData& getFrameBuffer(int index) {
+            return (index == 0) ? *frameBuffer0_ : *frameBuffer1_;
+        }
+        const FrameData& getFrameBuffer(int index) const {
+            return (index == 0) ? *frameBuffer0_ : *frameBuffer1_;
+        }
     };
 
 } // namespace libre
