@@ -1,4 +1,5 @@
 // src/render/Renderer.cpp
+// COMPLETE FILE - Replace your existing Renderer.cpp with this
 
 #include "Renderer.h"
 #include "VulkanContext.h"
@@ -8,6 +9,7 @@
 #include "Grid.h"
 #include "Mesh.h"
 #include "../core/Camera.h"
+#include "../core/FrameData.h"
 #include <iostream>
 #include <stdexcept>
 #include <array>
@@ -51,7 +53,6 @@ void Renderer::onSwapChainRecreated(SwapChain* newSwapChain) {
 
     this->swapChain = newSwapChain;
 
-    // Recreate pipeline with new render pass
     cleanupPipeline();
     createPipeline();
 
@@ -112,172 +113,6 @@ void Renderer::cleanup() {
     std::cout << "[OK] Renderer cleaned up" << std::endl;
 }
 
-void Renderer::createSceneObjects() {
-    grid = new Grid();
-    grid->create(context, 10.0f, 20);
-    std::cout << "[OK] Scene objects created" << std::endl;
-}
-
-void Renderer::submitMesh(Mesh* mesh, const glm::mat4& transform, const glm::vec3& color, bool selected) {
-    RenderObject obj;
-    obj.mesh = mesh;
-    obj.transform = transform;
-    obj.color = color;
-    obj.selected = selected;
-    renderQueue.push_back(obj);
-}
-
-void Renderer::clearSubmissions() {
-    renderQueue.clear();
-}
-
-Mesh* Renderer::getOrCreateMesh(uint64_t entityId, const void* vertexData, size_t vertexCount,
-    const uint32_t* indexData, size_t indexCount) {
-    auto it = meshCache.find(entityId);
-    if (it != meshCache.end()) {
-        return it->second;
-    }
-
-    // Don't create mesh if no vertex data provided
-    if (vertexData == nullptr || vertexCount == 0) {
-        return nullptr;
-    }
-
-    Mesh* mesh = new Mesh();
-
-    const Vertex* vertices = static_cast<const Vertex*>(vertexData);
-    mesh->setVertices(std::vector<Vertex>(vertices, vertices + vertexCount));
-    mesh->setIndices(std::vector<uint32_t>(indexData, indexData + indexCount));
-    mesh->create(context);
-
-    meshCache[entityId] = mesh;
-
-    std::cout << "[Renderer] Created mesh for entity " << entityId
-        << " with " << vertexCount << " vertices" << std::endl;
-
-    return mesh;
-}
-
-Mesh* Renderer::getMeshFromCache(uint64_t entityId) {
-    auto it = meshCache.find(entityId);
-    if (it != meshCache.end()) {
-        return it->second;
-    }
-    return nullptr;
-}
-
-void Renderer::removeMesh(uint64_t entityId) {
-    auto it = meshCache.find(entityId);
-    if (it != meshCache.end()) {
-        if (it->second) {
-            it->second->cleanup();
-            delete it->second;
-        }
-        meshCache.erase(it);
-    }
-}
-
-bool Renderer::drawFrame(Camera* camera) {
-    // Wait for previous frame with this index to complete
-    vkWaitForFences(context->getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-
-    // Acquire next image
-    uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(
-        context->getDevice(),
-        swapChain->getSwapChain(),
-        UINT64_MAX,
-        imageAvailableSemaphores[currentFrame],
-        VK_NULL_HANDLE,
-        &imageIndex
-    );
-
-    // Check if swap chain needs recreation
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        std::cout << "[Renderer] Swap chain out of date" << std::endl;
-        return false;
-    }
-    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        throw std::runtime_error("Failed to acquire swap chain image!");
-    }
-
-    // Only reset fence if we're actually submitting work
-    vkResetFences(context->getDevice(), 1, &inFlightFences[currentFrame]);
-
-    // Update uniform buffer
-    updateUniformBuffer(currentFrame, camera);
-
-    // Record command buffer
-    vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-    recordCommandBuffer(commandBuffers[currentFrame], imageIndex, camera);
-
-    // Submit command buffer
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-    VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
-    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
-
-    VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    if (vkQueueSubmit(context->getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to submit draw command buffer!");
-    }
-
-    // Present
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    VkSwapchainKHR swapChains[] = { swapChain->getSwapChain() };
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &imageIndex;
-
-    result = vkQueuePresentKHR(context->getPresentQueue(), &presentInfo);
-
-    // Check if swap chain needs recreation
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-        std::cout << "[Renderer] Swap chain suboptimal or out of date after present" << std::endl;
-        return false;
-    }
-    else if (result != VK_SUCCESS) {
-        throw std::runtime_error("Failed to present swap chain image!");
-    }
-
-    // Advance frame index
-    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-    // Clear render queue for next frame
-    clearSubmissions();
-
-    return true;
-}
-
-void Renderer::updateUniformBuffer(uint32_t currentImage, Camera* camera) {
-    UniformBufferObject ubo{};
-    ubo.view = camera->getViewMatrix();
-    ubo.projection = camera->getProjectionMatrix();
-    ubo.lightDir = glm::normalize(glm::vec3(0.5f, 0.7f, 0.5f));
-    ubo.viewPos = camera->getPosition();
-
-    uniformBuffer->update(currentImage, ubo);
-}
-
-void Renderer::waitIdle() {
-    if (context && context->getDevice()) {
-        vkDeviceWaitIdle(context->getDevice());
-    }
-}
-
 void Renderer::createCommandPool() {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -324,6 +159,202 @@ void Renderer::createSyncObjects() {
     }
 }
 
+void Renderer::createSceneObjects() {
+    grid = new Grid();
+    grid->create(context, 10.0f, 20);
+    std::cout << "[OK] Scene objects created" << std::endl;
+}
+
+void Renderer::submitMesh(Mesh* mesh, const glm::mat4& transform, const glm::vec3& color, bool selected) {
+    if (!mesh) {
+        std::cerr << "[Renderer] WARNING: submitMesh called with null mesh!" << std::endl;
+        return;
+    }
+
+    RenderObject obj;
+    obj.mesh = mesh;
+    obj.transform = transform;
+    obj.color = color;
+    obj.selected = selected;
+    renderQueue.push_back(obj);
+}
+
+void Renderer::clearSubmissions() {
+    renderQueue.clear();
+}
+
+Mesh* Renderer::getOrCreateMesh(uint64_t entityId, const void* vertexData, size_t vertexCount,
+    const uint32_t* indexData, size_t indexCount) {
+
+    // Check cache first
+    auto it = meshCache.find(entityId);
+    if (it != meshCache.end()) {
+        return it->second;
+    }
+
+    // Don't create mesh if no vertex data provided
+    if (vertexData == nullptr || vertexCount == 0) {
+        std::cerr << "[Renderer] Cannot create mesh " << entityId << ": no vertex data" << std::endl;
+        return nullptr;
+    }
+
+    if (indexData == nullptr || indexCount == 0) {
+        std::cerr << "[Renderer] Cannot create mesh " << entityId << ": no index data" << std::endl;
+        return nullptr;
+    }
+
+    std::cout << "[Renderer] Creating mesh for entity " << entityId
+        << " with " << vertexCount << " vertices and "
+        << indexCount << " indices" << std::endl;
+
+    Mesh* mesh = new Mesh();
+
+    // Convert UploadVertex to Vertex (they have the same layout but being explicit is safer)
+    const libre::UploadVertex* uploadVerts = static_cast<const libre::UploadVertex*>(vertexData);
+
+    std::vector<Vertex> vertices;
+    vertices.reserve(vertexCount);
+
+    for (size_t i = 0; i < vertexCount; ++i) {
+        Vertex v;
+        v.position = uploadVerts[i].position;
+        v.normal = uploadVerts[i].normal;
+        v.color = uploadVerts[i].color;
+        vertices.push_back(v);
+    }
+
+    // Debug output
+    if (!vertices.empty()) {
+        std::cout << "[Renderer] First vertex: pos("
+            << vertices[0].position.x << ", "
+            << vertices[0].position.y << ", "
+            << vertices[0].position.z << ") normal("
+            << vertices[0].normal.x << ", "
+            << vertices[0].normal.y << ", "
+            << vertices[0].normal.z << ")" << std::endl;
+    }
+
+    mesh->setVertices(vertices);
+    mesh->setIndices(std::vector<uint32_t>(indexData, indexData + indexCount));
+    mesh->create(context);
+
+    meshCache[entityId] = mesh;
+
+    std::cout << "[Renderer] Mesh " << entityId << " created successfully. "
+        << "Cache size: " << meshCache.size() << std::endl;
+
+    return mesh;
+}
+
+Mesh* Renderer::getMeshFromCache(uint64_t entityId) {
+    auto it = meshCache.find(entityId);
+    if (it != meshCache.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+void Renderer::removeMesh(uint64_t entityId) {
+    auto it = meshCache.find(entityId);
+    if (it != meshCache.end()) {
+        if (it->second) {
+            it->second->cleanup();
+            delete it->second;
+        }
+        meshCache.erase(it);
+        std::cout << "[Renderer] Removed mesh " << entityId << std::endl;
+    }
+}
+
+void Renderer::waitIdle() {
+    if (context && context->getDevice()) {
+        vkDeviceWaitIdle(context->getDevice());
+    }
+}
+
+bool Renderer::drawFrame(Camera* camera) {
+    // Wait for previous frame with this index to complete
+    vkWaitForFences(context->getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+    // Acquire next image
+    uint32_t imageIndex;
+    VkResult result = vkAcquireNextImageKHR(
+        context->getDevice(),
+        swapChain->getSwapChain(),
+        UINT64_MAX,
+        imageAvailableSemaphores[currentFrame],
+        VK_NULL_HANDLE,
+        &imageIndex
+    );
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        std::cout << "[Renderer] Swap chain out of date" << std::endl;
+        return false;
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        throw std::runtime_error("Failed to acquire swap chain image!");
+    }
+
+    vkResetFences(context->getDevice(), 1, &inFlightFences[currentFrame]);
+
+    updateUniformBuffer(currentFrame, camera);
+
+    vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+    recordCommandBuffer(commandBuffers[currentFrame], imageIndex, camera);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+
+    VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    if (vkQueueSubmit(context->getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to submit draw command buffer!");
+    }
+
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+
+    VkSwapchainKHR swapChains[] = { swapChain->getSwapChain() };
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+
+    result = vkQueuePresentKHR(context->getPresentQueue(), &presentInfo);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        std::cout << "[Renderer] Swap chain suboptimal/out of date after present" << std::endl;
+        return false;
+    }
+    else if (result != VK_SUCCESS) {
+        throw std::runtime_error("Failed to present swap chain image!");
+    }
+
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    return true;
+}
+
+void Renderer::updateUniformBuffer(uint32_t currentImage, Camera* camera) {
+    UniformBufferObject ubo{};
+    ubo.view = camera->getViewMatrix();
+    ubo.projection = camera->getProjectionMatrix();
+    ubo.lightDir = glm::normalize(glm::vec3(0.5f, 0.7f, 0.5f));
+    ubo.viewPos = camera->getPosition();
+
+    uniformBuffer->update(currentImage, ubo);
+}
+
 void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Camera* camera) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -365,7 +396,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 
     VkDescriptorSet descriptorSet = uniformBuffer->getDescriptorSet(currentFrame);
 
-    // Draw grid
+    // ========================================
+    // 1. Draw grid
+    // ========================================
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getGridPipeline());
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
         pipeline->getGridPipelineLayout(), 0, 1, &descriptorSet, 0, nullptr);
@@ -378,24 +411,30 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     grid->bind(commandBuffer);
     grid->draw(commandBuffer);
 
-    // Draw meshes
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getMeshPipeline());
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline->getMeshPipelineLayout(), 0, 1, &descriptorSet, 0, nullptr);
+    // ========================================
+    // 2. Draw meshes
+    // ========================================
+    if (!renderQueue.empty()) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getMeshPipeline());
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline->getMeshPipelineLayout(), 0, 1, &descriptorSet, 0, nullptr);
 
-    for (const auto& obj : renderQueue) {
-        if (obj.mesh) {
-            PushConstants push{};
-            push.model = obj.transform;
-            vkCmdPushConstants(commandBuffer, pipeline->getMeshPipelineLayout(),
-                VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &push);
+        for (const auto& obj : renderQueue) {
+            if (obj.mesh) {
+                PushConstants push{};
+                push.model = obj.transform;
+                vkCmdPushConstants(commandBuffer, pipeline->getMeshPipelineLayout(),
+                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &push);
 
-            obj.mesh->bind(commandBuffer);
-            obj.mesh->draw(commandBuffer);
+                obj.mesh->bind(commandBuffer);
+                obj.mesh->draw(commandBuffer);
+            }
         }
     }
 
-    // Render UI if callback is set
+    // ========================================
+    // 3. Render UI (MUST be last - draws on top)
+    // ========================================
     if (uiRenderCallback_) {
         uiRenderCallback_(commandBuffer);
     }

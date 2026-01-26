@@ -1,37 +1,22 @@
 // src/render/RenderThread.cpp
+// COMPLETE FILE - Replace your existing RenderThread.cpp with this
 
 #include "RenderThread.h"
 #include "VulkanContext.h"
 #include "SwapChain.h"
 #include "Renderer.h"
-#include "Mesh.h"
-#include "../core/Camera.h"
 #include "../core/Window.h"
-#include "../core/Editor.h"
-#include "../components/CoreComponents.h"
-
+#include "../core/Camera.h"
 #include <iostream>
 #include <chrono>
 
 namespace libre {
 
-    // ============================================================================
-    // CONSTRUCTOR / DESTRUCTOR
-    // ============================================================================
-
-    RenderThread::RenderThread() {
-        lastFPSUpdate_ = std::chrono::steady_clock::now();
-    }
+    RenderThread::RenderThread() {}
 
     RenderThread::~RenderThread() {
-        if (running_.load()) {
-            stop();
-        }
+        stop();
     }
-
-    // ============================================================================
-    // LIFECYCLE
-    // ============================================================================
 
     bool RenderThread::start(Window* window) {
         if (running_.load()) {
@@ -40,7 +25,7 @@ namespace libre {
         }
 
         if (!window) {
-            std::cerr << "[RenderThread] Invalid window handle!" << std::endl;
+            std::cerr << "[RenderThread] Window is null!" << std::endl;
             return false;
         }
 
@@ -50,6 +35,7 @@ namespace libre {
 
         thread_ = std::thread(&RenderThread::threadMain, this);
 
+        // Wait for initialization
         auto startTime = std::chrono::steady_clock::now();
         while (!running_.load() && !hasError_.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -181,62 +167,48 @@ namespace libre {
 
         if (!initializeVulkan()) {
             std::lock_guard<std::mutex> lock(errorMutex_);
-            errorMessage_ = "Failed to initialize Vulkan";
-            hasError_.store(true, std::memory_order_release);
+            if (errorMessage_.empty()) {
+                errorMessage_ = "Vulkan initialization failed";
+            }
+            hasError_.store(true);
             return;
         }
 
         running_.store(true, std::memory_order_release);
+        std::cout << "[RenderThread] Running" << std::endl;
 
-        // Main render loop
         while (!shouldStop_.load(std::memory_order_acquire)) {
-            // Check for swapchain recreation request
+            // Handle swapchain recreation
             if (swapchainRecreateRequested_.load(std::memory_order_acquire)) {
-                std::lock_guard<std::mutex> lock(swapchainMutex_);
-                recreateSwapchain();
+                handleSwapchainRecreate();
                 swapchainRecreateRequested_.store(false, std::memory_order_release);
             }
 
-            // Check if window is minimized
-            int width = window_->getWidth();
-            int height = window_->getHeight();
-            if (width == 0 || height == 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-
-            // Get frame data
-            FrameData currentFrameData;
+            // Check for new frame data
             if (newFrameAvailable_.load(std::memory_order_acquire)) {
                 int readIdx = writeBufferIndex_.load(std::memory_order_acquire);
-                readBufferIndex_.store(readIdx, std::memory_order_relaxed);
                 writeBufferIndex_.store(1 - readIdx, std::memory_order_release);
                 newFrameAvailable_.store(false, std::memory_order_release);
-                currentFrameData = frameBuffers_[readIdx];
+
+                renderFrame(frameBuffers_[readIdx]);
             }
             else {
-                int readIdx = readBufferIndex_.load(std::memory_order_acquire);
-                currentFrameData = frameBuffers_[readIdx];
+                // No new frame, sleep briefly to avoid spinning
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
+        }
 
-            // Render the frame
-            renderFrame(currentFrameData);
+        // Cleanup
+        std::cout << "[RenderThread] Shutting down..." << std::endl;
 
-            // Update FPS counter
-            frameCount_++;
-            auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration<float>(now - lastFPSUpdate_).count();
-            if (elapsed >= 1.0f) {
-                currentFPS_.store(frameCount_ / elapsed, std::memory_order_relaxed);
-                frameCount_ = 0;
-                lastFPSUpdate_ = now;
-            }
+        if (vulkanContext_ && vulkanContext_->getDevice()) {
+            vkDeviceWaitIdle(vulkanContext_->getDevice());
         }
 
         cleanupVulkan();
 
         running_.store(false, std::memory_order_release);
-        std::cout << "[RenderThread] Thread finished" << std::endl;
+        std::cout << "[RenderThread] Thread ended" << std::endl;
     }
 
     // ============================================================================
@@ -247,8 +219,8 @@ namespace libre {
         try {
             std::cout << "[RenderThread] Initializing Vulkan..." << std::endl;
 
-            vulkanContext_ = std::make_unique<VulkanContext>(window_);
-            vulkanContext_->init();
+            vulkanContext_ = std::make_unique<VulkanContext>();
+            vulkanContext_->init(window_->getHandle());
 
             swapChain_ = std::make_unique<SwapChain>();
             swapChain_->init(vulkanContext_.get(), window_->getHandle());
@@ -264,18 +236,14 @@ namespace libre {
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[RenderThread] Vulkan initialization error: " << e.what() << std::endl;
+            std::lock_guard<std::mutex> lock(errorMutex_);
+            errorMessage_ = e.what();
+            std::cerr << "[RenderThread] Vulkan initialization failed: " << e.what() << std::endl;
             return false;
         }
     }
 
     void RenderThread::cleanupVulkan() {
-        std::cout << "[RenderThread] Cleaning up Vulkan..." << std::endl;
-
-        if (vulkanContext_ && vulkanContext_->getDevice()) {
-            vkDeviceWaitIdle(vulkanContext_->getDevice());
-        }
-
         if (renderer_) {
             renderer_->cleanup();
             renderer_.reset();
@@ -290,15 +258,9 @@ namespace libre {
             vulkanContext_->cleanup();
             vulkanContext_.reset();
         }
-
-        std::cout << "[RenderThread] Vulkan cleanup complete" << std::endl;
     }
 
-    // ============================================================================
-    // SWAPCHAIN RECREATION
-    // ============================================================================
-
-    void RenderThread::recreateSwapchain() {
+    void RenderThread::handleSwapchainRecreate() {
         uint32_t newWidth = newSwapchainWidth_.load(std::memory_order_acquire);
         uint32_t newHeight = newSwapchainHeight_.load(std::memory_order_acquire);
 
@@ -306,8 +268,6 @@ namespace libre {
 
         vkDeviceWaitIdle(vulkanContext_->getDevice());
 
-        // SwapChain::recreate only takes GLFWwindow* parameter
-        // It will query the current window size internally
         swapChain_->recreate(window_->getHandle());
 
         VkExtent2D extent = swapChain_->getExtent();
@@ -360,25 +320,25 @@ namespace libre {
         }
 
         // =========================================================================
-        // STEP 3: Connect UI callback to renderer
+        // STEP 3: Setup UI callback - FIXED: Avoid deadlock!
         // =========================================================================
+        // Copy the callback OUTSIDE the lock scope to avoid deadlock.
+        // The previous version held callbackMutex_ while setting up a lambda that
+        // also tried to acquire callbackMutex_ when invoked.
+        std::function<void(void*)> uiCallback;
         {
             std::lock_guard<std::mutex> lock(callbackMutex_);
-            if (uiRenderCallback_) {
-                renderer_->setUIRenderCallback([this](VkCommandBuffer cmd) {
-                    std::function<void(void*)> callback;
-                    {
-                        std::lock_guard<std::mutex> innerLock(callbackMutex_);
-                        callback = uiRenderCallback_;
-                    }
-                    if (callback) {
-                        callback(static_cast<void*>(cmd));
-                    }
-                    });
-            }
-            else {
-                renderer_->setUIRenderCallback(nullptr);
-            }
+            uiCallback = uiRenderCallback_;
+        }
+        // Mutex is now released BEFORE we set up the renderer callback
+
+        if (uiCallback) {
+            renderer_->setUIRenderCallback([uiCallback](VkCommandBuffer cmd) {
+                uiCallback(static_cast<void*>(cmd));
+                });
+        }
+        else {
+            renderer_->setUIRenderCallback(nullptr);
         }
 
         // =========================================================================
@@ -392,7 +352,7 @@ namespace libre {
         bool success = renderer_->drawFrame(&tempCamera);
 
         if (!success) {
-            // Swapchain needs recreation - this will be handled next frame
+            // Swapchain needs recreation - will be handled next frame
             swapchainRecreateRequested_.store(true, std::memory_order_release);
         }
 
@@ -400,7 +360,7 @@ namespace libre {
     }
 
     // ============================================================================
-    // SYNC ECS TO RENDERER (Future: for more complex mesh management)
+    // SYNC ECS TO RENDERER
     // ============================================================================
 
     void RenderThread::syncECSToRenderer() {

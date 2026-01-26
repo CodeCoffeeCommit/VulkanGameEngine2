@@ -1,11 +1,13 @@
 #version 450
 
-// Scene-wide data (constant for entire frame)
+// Scene-wide data (must match C++ UniformBufferObject struct!)
 layout(binding = 0) uniform UniformBufferObject {
     mat4 view;
     mat4 projection;
     vec3 lightDir;
+    float _pad1;
     vec3 viewPos;
+    float _pad2;
 } ubo;
 
 // Per-object data (changes every draw call)

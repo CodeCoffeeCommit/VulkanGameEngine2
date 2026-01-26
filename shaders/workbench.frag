@@ -1,11 +1,13 @@
 #version 450
 
+// Scene-wide data (must match C++ UniformBufferObject struct!)
 layout(binding = 0) uniform UniformBufferObject {
-    mat4 model;
     mat4 view;
     mat4 projection;
     vec3 lightDir;
+    float _pad1;
     vec3 viewPos;
+    float _pad2;
 } ubo;
 
 layout(location = 0) in vec3 fragColor;
@@ -25,8 +27,8 @@ void main() {
     
     // Light colors
     vec3 light1Color = vec3(1.0, 0.98, 0.95);   // Warm key light
-    vec3 light2Color = vec3(0.6, 0.7, 0.8);      // Cool fill light
-    vec3 light3Color = vec3(0.3, 0.3, 0.3);      // Rim light
+    vec3 light2Color = vec3(0.6, 0.7, 0.8);     // Cool fill light
+    vec3 light3Color = vec3(0.3, 0.3, 0.3);     // Rim light
     
     // Diffuse lighting
     float diff1 = max(dot(normal, light1Dir), 0.0);
