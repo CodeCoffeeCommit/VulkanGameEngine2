@@ -12,6 +12,7 @@
 #include "../ui/UI.h"
 #include "../ui/Widgets.h"
 #include "../ui/UIScale.h"
+#include <unordered_set>
 
 #include <iostream>
 #include <algorithm>
@@ -45,33 +46,52 @@ void Application::run() {
 void Application::init() {
     std::cout << "\n=== Initializing Application ===" << std::endl;
 
+    // Record start time
     startTime = std::chrono::steady_clock::now();
     lastFrameTime = startTime;
 
+    // Create window (Main Thread owns this)
     window = std::make_unique<Window>(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE);
+
+    // Create input manager
     inputManager = std::make_unique<InputManager>(window.get());
+
+    // Initialize Editor singleton
     libre::Editor::instance().initialize();
 
+    // Create camera (Main Thread owns this)
     camera = std::make_unique<Camera>();
     camera->setAspectRatio(static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT));
 
+    // Create and start render thread
+    // ALL Vulkan initialization happens on the render thread
     renderThread = std::make_unique<libre::RenderThread>();
     if (!renderThread->start(window.get())) {
         throw std::runtime_error("Failed to start render thread!");
     }
 
+    // Setup window resize callback - just sets a flag, doesn't render
     window->setRefreshCallback([this]() {
         if (!window->isInModalLoop()) {
             pendingResize.store(true, std::memory_order_release);
         }
         });
 
+    // Create default scene
     createDefaultScene();
+
+    // FIX: Update transforms IMMEDIATELY after creating scene
+    // This ensures worldMatrix is computed before first frame
+    updateTransforms();
+
+    // Setup UI (must be after render thread starts and Vulkan is initialized)
     setupUI();
+
     printControls();
 
     std::cout << "=== Initialization Complete ===\n" << std::endl;
 }
+
 
 // ============================================================================
 // UI SETUP - FIXED VERSION
@@ -224,16 +244,20 @@ void Application::cleanup() {
 // ============================================================================
 
 void Application::mainLoop() {
-    std::cout << "[MainLoop] Starting main loop" << std::endl;
+    std::cout << "[MainLoop] Starting main loop (render thread architecture)" << std::endl;
+
+    // Track which entities have pending uploads
+    std::unordered_set<libre::EntityID> pendingUploads;
+    uint64_t lastProcessedFrame = 0;
 
     while (!window->shouldClose()) {
         // ====================================================================
-        // 1. POLL EVENTS
+        // 1. POLL EVENTS (Fast - never blocks)
         // ====================================================================
         window->pollEvents();
 
         // ====================================================================
-        // 2. HANDLE RESIZE COMPLETION - FIXED: Use resetResizeFlag()
+        // 2. HANDLE RESIZE COMPLETION
         // ====================================================================
         if (!window->isInModalLoop() &&
             (pendingResize.load(std::memory_order_acquire) || window->wasResized())) {
@@ -256,7 +280,7 @@ void Application::mainLoop() {
                 std::cout << "[MainLoop] Resize complete: " << w << "x" << h << std::endl;
             }
 
-            window->resetResizeFlag();  // FIXED: Was resetResizedFlag()
+            window->resetResizeFlag();
             pendingResize.store(false, std::memory_order_release);
         }
 
@@ -287,17 +311,43 @@ void Application::mainLoop() {
         update(deltaTime);
 
         // ====================================================================
-        // 7. PREPARE FRAME DATA
+        // 7. CHECK IF RENDER THREAD HAS PROCESSED OUR UPLOADS
+        // ====================================================================
+        uint64_t lastCompleted = renderThread->getLastCompletedFrame();
+        if (lastCompleted > lastProcessedFrame && !pendingUploads.empty()) {
+            // Render thread processed our frame - safe to clear gpuDirty
+            auto& world = libre::Editor::instance().getWorld();
+            for (libre::EntityID id : pendingUploads) {
+                if (auto* mesh = world.getComponent<libre::MeshComponent>(id)) {
+                    mesh->gpuDirty = false;
+                    if (lastProcessedFrame <= 10) {
+                        std::cout << "[MainLoop] Confirmed upload for entity " << id << std::endl;
+                    }
+                }
+            }
+            pendingUploads.clear();
+            lastProcessedFrame = lastCompleted;
+        }
+
+        // ====================================================================
+        // 8. PREPARE FRAME DATA
         // ====================================================================
         libre::FrameData frameData = prepareFrameData();
 
         // ====================================================================
-        // 8. SUBMIT TO RENDER THREAD
+        // 9. TRACK ENTITIES WITH PENDING UPLOADS
+        // ====================================================================
+        for (const auto& upload : frameData.meshUploads) {
+            pendingUploads.insert(upload.entityId);
+        }
+
+        // ====================================================================
+        // 10. SUBMIT TO RENDER THREAD (Non-blocking!)
         // ====================================================================
         renderThread->submitFrameData(frameData);
 
         // ====================================================================
-        // 9. UPDATE INPUT STATE
+        // 11. UPDATE INPUT STATE
         // ====================================================================
         inputManager->update();
     }
@@ -534,6 +584,10 @@ libre::FrameData Application::prepareFrameData() {
     auto& editor = libre::Editor::instance();
     auto& world = editor.getWorld();
 
+
+    // Get last completed frame to check if uploads were processed
+    uint64_t lastCompletedFrame = renderThread->getLastCompletedFrame();
+
     // Diagnostic counters
     size_t totalMeshComponents = 0;
     size_t meshesNeedingUpload = 0;
@@ -548,13 +602,18 @@ libre::FrameData Application::prepareFrameData() {
         if (!transform) return;
         if (render && !render->visible) return;
 
-        // Diagnostic: Print mesh component state (first 5 frames only)
-        if (data.frameNumber <= 5) {
+        // Diagnostic logging (first 10 frames)
+        if (data.frameNumber <= 10) {
             std::cout << "[prepareFrameData] Entity " << id
                 << " | gpuDirty=" << (meshComp.gpuDirty ? "TRUE" : "false")
                 << " | vertices=" << meshComp.vertices.size()
-                << " | indices=" << meshComp.indices.size() << std::endl;
+                << " | indices=" << meshComp.indices.size()
+                << " | worldMatrix[3]=" << transform->worldMatrix[3][0] << ","
+                << transform->worldMatrix[3][1] << "," << transform->worldMatrix[3][2]
+                << std::endl;
         }
+
+
 
         // If mesh needs GPU upload
         if (meshComp.gpuDirty && !meshComp.vertices.empty()) {
@@ -577,7 +636,7 @@ libre::FrameData Application::prepareFrameData() {
             data.meshUploads.push_back(std::move(upload));
 
             // Mark as uploaded (will be set to false by render thread)
-            meshComp.gpuDirty = false;
+            //remove -->  meshComp.gpuDirty = false;
 
             if (data.frameNumber <= 5) {
                 std::cout << "[prepareFrameData] >>> QUEUED upload for entity "
