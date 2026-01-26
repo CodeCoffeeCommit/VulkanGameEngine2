@@ -89,7 +89,7 @@ namespace libre {
         mutable std::mutex errorMutex_;
 
         // Frame data double buffer
-        FrameData frameBuffers_[2];
+        std::unique_ptr<FrameData> frameBuffers_[2];
         std::atomic<int> writeBufferIndex_{ 0 };
         std::atomic<int> readBufferIndex_{ 1 };
         std::atomic<bool> newFrameAvailable_{ false };

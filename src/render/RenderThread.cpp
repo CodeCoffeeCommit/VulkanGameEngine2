@@ -16,8 +16,8 @@ namespace libre {
 
     RenderThread::RenderThread() {
         // Initialize both frame buffers
-        frameBuffers_[0] = FrameData();
-        frameBuffers_[1] = FrameData();
+        frameBuffers_[0] = std::make_unique<FrameData>();
+        frameBuffers_[1] = std::make_unique<FrameData>();
     }
 
     RenderThread::~RenderThread() {
@@ -105,7 +105,7 @@ namespace libre {
         int writeIdx = writeBufferIndex_.load(std::memory_order_acquire);
 
         // Copy data to write buffer
-        frameBuffers_[writeIdx] = data;
+        *frameBuffers_[writeIdx] = data;
 
         // Swap buffers: render thread will now read from this buffer
         // and we'll write to the other one next time
@@ -186,7 +186,7 @@ namespace libre {
                 newFrameAvailable_.store(false, std::memory_order_release);
 
                 // Render the frame
-                renderFrame(frameBuffers_[readIdx]);
+                *renderFrame(frameBuffers_[readIdx]);
             }
             else {
                 // No new frame, sleep briefly to avoid spinning
