@@ -1,8 +1,8 @@
 // src/render/RenderThread.h
+// COMPLETE FILE - Replace your existing RenderThread.h with this
 
 #pragma once
 
-// CRITICAL: Include Vulkan BEFORE other headers for VkRenderPass type
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -12,6 +12,7 @@
 #include <functional>
 #include <memory>
 #include <chrono>
+#include <string>
 
 #include "../core/FrameData.h"
 
@@ -35,41 +36,26 @@ namespace libre {
         RenderThread(RenderThread&&) = delete;
         RenderThread& operator=(RenderThread&&) = delete;
 
-        // ========================================================================
-        // LIFECYCLE
-        // ========================================================================
-
+        // Lifecycle
         bool start(Window* window);
         void stop();
         bool isRunning() const { return running_.load(std::memory_order_acquire); }
         bool hasError() const { return hasError_.load(std::memory_order_acquire); }
         std::string getErrorMessage() const;
 
-        // ========================================================================
-        // FRAME SUBMISSION
-        // ========================================================================
-
+        // Frame submission
         void submitFrameData(const FrameData& data);
         void setUIRenderCallback(std::function<void(void* commandBuffer)> callback);
 
-        // ========================================================================
-        // SWAPCHAIN MANAGEMENT
-        // ========================================================================
-
+        // Swapchain management
         void requestSwapchainRecreate(uint32_t width, uint32_t height);
         void getSwapchainExtent(uint32_t& width, uint32_t& height) const;
 
-        // ========================================================================
-        // VULKAN ACCESS (for UI initialization)
-        // ========================================================================
-
+        // Vulkan access (for UI initialization)
         VulkanContext* getVulkanContext() const { return vulkanContext_.get(); }
         VkRenderPass getRenderPass() const;
 
-        // ========================================================================
-        // RESOURCE MANAGEMENT
-        // ========================================================================
-
+        // Resource management
         MeshHandle registerMesh(const void* vertices, size_t vertexCount,
             const uint32_t* indices, size_t indexCount,
             uint64_t entityId = 0);
@@ -77,34 +63,24 @@ namespace libre {
         void updateMeshRegion(MeshHandle handle, uint32_t startVertex,
             uint32_t vertexCount, const void* vertexData);
 
-        // ========================================================================
-        // STATISTICS
-        // ========================================================================
-
+        // Statistics
         uint64_t getLastCompletedFrame() const {
             return lastCompletedFrame_.load(std::memory_order_acquire);
         }
         float getCurrentFPS() const { return currentFPS_.load(std::memory_order_relaxed); }
 
-        // Get window handle (needed for swapchain recreate)
         Window* getWindow() const { return window_; }
 
     private:
-        // ========================================================================
-        // RENDER THREAD INTERNALS
-        // ========================================================================
-
+        // Private methods
         void threadMain();
         bool initializeVulkan();
         void cleanupVulkan();
+        void handleSwapchainRecreate();
         void renderFrame(const FrameData& frameData);
-        void recreateSwapchain();
         void syncECSToRenderer();
 
-        // ========================================================================
-        // THREAD STATE
-        // ========================================================================
-
+        // Thread state
         std::thread thread_;
         std::atomic<bool> running_{ false };
         std::atomic<bool> shouldStop_{ false };
@@ -112,50 +88,33 @@ namespace libre {
         std::string errorMessage_;
         mutable std::mutex errorMutex_;
 
-        // ========================================================================
-        // FRAME DATA DOUBLE BUFFER
-        // ========================================================================
-
+        // Frame data double buffer
         FrameData frameBuffers_[2];
         std::atomic<int> writeBufferIndex_{ 0 };
         std::atomic<int> readBufferIndex_{ 1 };
         std::atomic<bool> newFrameAvailable_{ false };
 
-        // ========================================================================
-        // SWAPCHAIN RECREATION
-        // ========================================================================
-
+        // Swapchain recreation
         std::atomic<bool> swapchainRecreateRequested_{ false };
         std::atomic<uint32_t> newSwapchainWidth_{ 0 };
         std::atomic<uint32_t> newSwapchainHeight_{ 0 };
         std::mutex swapchainMutex_;
-
         std::atomic<uint32_t> currentSwapchainWidth_{ 0 };
         std::atomic<uint32_t> currentSwapchainHeight_{ 0 };
 
-        // ========================================================================
-        // VULKAN OBJECTS
-        // ========================================================================
-
+        // Vulkan objects (owned by render thread)
         std::unique_ptr<VulkanContext> vulkanContext_;
         std::unique_ptr<SwapChain> swapChain_;
         std::unique_ptr<Renderer> renderer_;
         Window* window_ = nullptr;
 
-        // ========================================================================
-        // CALLBACKS
-        // ========================================================================
-
+        // Callbacks
         std::function<void(void*)> uiRenderCallback_;
         mutable std::mutex callbackMutex_;
 
-        // ========================================================================
-        // STATISTICS
-        // ========================================================================
-
+        // Statistics
         std::atomic<uint64_t> lastCompletedFrame_{ 0 };
         std::atomic<float> currentFPS_{ 0.0f };
-
         uint64_t frameCount_ = 0;
         std::chrono::steady_clock::time_point lastFPSUpdate_;
     };
