@@ -7,7 +7,6 @@
 #include "Application.h"
 #include "Editor.h"
 #include "FrameData.h"
-#include "Selection.h"
 #include "../render/RenderThread.h"
 #include "../render/Mesh.h"
 #include "../world/Primitives.h"
@@ -84,7 +83,7 @@ void Application::init() {
 }
 
 // ============================================================================
-// UI SETUP - FIXED VERSION
+// UI SETUP
 // ============================================================================
 
 void Application::setupUI() {
@@ -95,9 +94,7 @@ void Application::setupUI() {
     // Create UIManager
     uiManager = std::make_unique<UIManager>();
 
-    // =========================================================================
-    // CRITICAL: Wait for render thread to fully initialize Vulkan
-    // =========================================================================
+    // Wait for render thread to fully initialize Vulkan
     std::cout << "[DEBUG] Waiting for render thread to initialize Vulkan..." << std::endl;
 
     auto waitStart = std::chrono::steady_clock::now();
@@ -124,89 +121,10 @@ void Application::setupUI() {
         return;
     }
 
-    std::cout << "[DEBUG] Got Vulkan objects from render thread" << std::endl;
-
-    // =========================================================================
-    // INITIALIZE UI MANAGER
-    // =========================================================================
+    // Initialize UIManager
     uiManager->init(ctx, renderPass, window->getHandle());
-    std::cout << "[DEBUG] UIManager initialized" << std::endl;
 
-    // =========================================================================
-    // CREATE MENU BAR
-    // =========================================================================
-    auto menuBar = std::make_unique<MenuBar>();
-
-    // File menu
-    menuBar->addMenu("File", {
-        MenuItem::Action("New", []() {
-            std::cout << "[Menu] New file\n";
-        }, "Ctrl+N"),
-        MenuItem::Action("Open...", []() {
-            std::cout << "[Menu] Open file\n";
-        }, "Ctrl+O"),
-        MenuItem::Action("Save", []() {
-            std::cout << "[Menu] Save file\n";
-        }, "Ctrl+S"),
-        MenuItem::Action("Save As...", []() {
-            std::cout << "[Menu] Save As\n";
-        }, "Ctrl+Shift+S"),
-        MenuItem::Separator(),
-        MenuItem::Action("Exit", [this]() {
-            std::cout << "[Menu] Exit\n";
-            glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE);
-        }, "Alt+F4")
-        });
-
-    // Edit menu
-    menuBar->addMenu("Edit", {
-        MenuItem::Action("Undo", []() {
-            libre::Editor::instance().undo();
-        }, "Ctrl+Z"),
-        MenuItem::Action("Redo", []() {
-            libre::Editor::instance().redo();
-        }, "Ctrl+Y"),
-        MenuItem::Separator(),
-        MenuItem::Action("Select All", []() {
-            libre::Editor::instance().selectAll();
-        }, "Ctrl+A"),
-        MenuItem::Action("Deselect All", []() {
-            libre::Editor::instance().deselectAll();
-        })
-        });
-
-    // View menu
-    menuBar->addMenu("View", {
-        MenuItem::Action("Reset View", [this]() {
-            std::cout << "[Menu] Reset View\n";
-            camera->reset();
-        }),
-        MenuItem::Action("Front View", [this]() {
-            camera->setFront();
-        }, "Numpad 1"),
-        MenuItem::Action("Right View", [this]() {
-            camera->setRight();
-        }, "Numpad 3"),
-        MenuItem::Action("Top View", [this]() {
-            camera->setTop();
-        }, "Numpad 7")
-        });
-
-    // Help menu
-    menuBar->addMenu("Help", {
-        MenuItem::Action("About", []() {
-            std::cout << "=== LibreDCC ===" << std::endl;
-            std::cout << "Version: 0.1.0 (Alpha)" << std::endl;
-            std::cout << "A modular 3D creative suite" << std::endl;
-        })
-        });
-
-    uiManager->setMenuBar(std::move(menuBar));
-    std::cout << "[DEBUG] Menu bar created" << std::endl;
-
-    // =========================================================================
-    // CONNECT UI RENDERING TO RENDER THREAD
-    // =========================================================================
+    // Connect UI render callback to render thread
     renderThread->setUIRenderCallback([this](void* commandBuffer) {
         if (uiManager) {
             uint32_t w, h;
@@ -220,16 +138,12 @@ void Application::setupUI() {
         });
     std::cout << "[DEBUG] UI render callback connected" << std::endl;
 
-    // =========================================================================
-    // INITIAL LAYOUT
-    // =========================================================================
+    // Initial layout
     int w, h;
     glfwGetFramebufferSize(window->getHandle(), &w, &h);
     uiManager->layout(static_cast<float>(w), static_cast<float>(h));
 
-    // =========================================================================
-    // SETUP DPI CHANGE CALLBACK
-    // =========================================================================
+    // Setup DPI change callback
     glfwSetWindowContentScaleCallback(window->getHandle(),
         [](GLFWwindow* win, float xscale, float yscale) {
             std::cout << "[UI] Content scale changed: " << xscale << ", " << yscale << std::endl;
@@ -398,7 +312,7 @@ void Application::processInput(float dt) {
         if (uiManager) {
             uiManager->onMouseButton(libre::ui::MouseButton::Left, true);
         }
-        handleSelection();
+        // Selection handling would go here when implemented
     }
 
     if (inputManager->isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_LEFT)) {
@@ -428,9 +342,7 @@ void Application::processInput(float dt) {
     altHeld = inputManager->isKeyPressed(GLFW_KEY_LEFT_ALT) ||
         inputManager->isKeyPressed(GLFW_KEY_RIGHT_ALT);
 
-    // =========================================================================
-    // CAMERA CONTROLS - MIDDLE MOUSE BUTTON
-    // =========================================================================
+    // Middle mouse for camera
     if (inputManager->isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_MIDDLE)) {
         middleMouseDown = true;
         lastMouseX = mouseX;
@@ -544,8 +456,8 @@ libre::FrameData Application::prepareFrameData() {
     glfwGetFramebufferSize(window->getHandle(), &w, &h);
     data.camera.aspectRatio = static_cast<float>(w) / static_cast<float>(std::max(1, h));
 
-    // Lighting - use vec4 for color (RGBA)
-    data.light.direction = glm::normalize(glm::vec4(0.5f, 0.7f, 0.5f, 0.0f));
+    // Lighting
+    data.light.direction = glm::vec4(glm::normalize(glm::vec3(0.5f, 0.7f, 0.5f)), 0.0f);
     data.light.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
     data.light.intensity = 1.0f;
     data.light.ambientStrength = 0.15f;
@@ -555,63 +467,61 @@ libre::FrameData Application::prepareFrameData() {
     data.viewport.height = static_cast<uint32_t>(std::max(1, h));
     data.viewport.showGrid = true;
 
+    // UI
+    data.ui.screenWidth = static_cast<float>(w);
+    data.ui.screenHeight = static_cast<float>(h);
+
     // Collect meshes from ECS
     auto& editor = libre::Editor::instance();
     auto& world = editor.getWorld();
 
-    world.forEach<libre::MeshComponent>([&](libre::EntityID id, libre::MeshComponent& mesh) {
+    world.forEach<libre::MeshComponent>([&](libre::EntityID id, libre::MeshComponent& meshComp) {
         auto* transform = world.getComponent<libre::TransformComponent>(id);
-        if (transform) {
-            libre::RenderableMesh rm;
-            rm.meshHandle = static_cast<libre::MeshHandle>(id);
-            rm.modelMatrix = transform->worldMatrix;
-            rm.entityId = id;
-            rm.isSelected = editor.isSelected(id);
-            rm.color = rm.isSelected ? glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
-            data.meshes.push_back(rm);
+        auto* render = world.getComponent<libre::RenderComponent>(id);
+
+        if (!transform) return;
+        if (render && !render->visible) return;
+
+        // Add to render list
+        libre::RenderableMesh rm;
+        rm.meshHandle = static_cast<libre::MeshHandle>(id);
+        rm.modelMatrix = transform->worldMatrix;
+        rm.entityId = id;
+        rm.isSelected = editor.isSelected(id);
+        rm.color = rm.isSelected ?
+            glm::vec4(1.0f, 0.5f, 0.2f, 1.0f) :
+            glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
+
+        if (render) {
+            rm.color = glm::vec4(render->baseColor, 1.0f);
+        }
+
+        data.meshes.push_back(rm);
+
+        // Check if mesh needs GPU upload
+        if (meshComp.gpuDirty && !meshComp.vertices.empty()) {
+            libre::MeshUploadData upload;
+            upload.entityId = id;
+
+            // Convert MeshVertex to UploadVertex (drop UV for now)
+            upload.vertices.reserve(meshComp.vertices.size());
+            for (const auto& mv : meshComp.vertices) {
+                libre::UploadVertex v;
+                v.position = mv.position;
+                v.normal = mv.normal;
+                v.color = mv.color;
+                upload.vertices.push_back(v);
+            }
+            upload.indices = meshComp.indices;
+
+            data.meshUploads.push_back(std::move(upload));
+
+            // Mark as clean - will be uploaded this frame
+            meshComp.gpuDirty = false;
         }
         });
 
-    // UI data
-    data.ui.screenWidth = static_cast<float>(w);
-    data.ui.screenHeight = static_cast<float>(h);
-    data.ui.dpiScale = libre::ui::UIScale::instance().getScaleFactor();
-
     return data;
-}
-
-// ============================================================================
-// SELECTION
-// ============================================================================
-
-void Application::handleSelection() {
-    double mouseX = inputManager->getMouseX();
-    double mouseY = inputManager->getMouseY();
-
-    int w, h;
-    glfwGetFramebufferSize(window->getHandle(), &w, &h);
-
-    libre::Ray ray = libre::SelectionSystem::screenToRay(
-        *camera,
-        static_cast<float>(mouseX),
-        static_cast<float>(mouseY),
-        w, h
-    );
-
-    auto& world = libre::Editor::instance().getWorld();
-    libre::HitResult hit = libre::SelectionSystem::raycast(world, ray);
-
-    auto& editor = libre::Editor::instance();
-
-    if (hit.hit()) {
-        if (!shiftHeld) {
-            editor.deselectAll();
-        }
-        editor.select(hit.entity);
-    }
-    else if (!shiftHeld) {
-        editor.deselectAll();
-    }
 }
 
 // ============================================================================

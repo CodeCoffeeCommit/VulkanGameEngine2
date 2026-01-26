@@ -1,3 +1,5 @@
+// src/render/Renderer.cpp
+
 #include "Renderer.h"
 #include "VulkanContext.h"
 #include "SwapChain.h"
@@ -55,6 +57,7 @@ void Renderer::onSwapChainRecreated(SwapChain* newSwapChain) {
 
     std::cout << "[Renderer] Updated for new swap chain" << std::endl;
 }
+
 void Renderer::setUIRenderCallback(std::function<void(VkCommandBuffer)> callback) {
     uiRenderCallback_ = callback;
 }
@@ -135,6 +138,11 @@ Mesh* Renderer::getOrCreateMesh(uint64_t entityId, const void* vertexData, size_
         return it->second;
     }
 
+    // Don't create mesh if no vertex data provided
+    if (vertexData == nullptr || vertexCount == 0) {
+        return nullptr;
+    }
+
     Mesh* mesh = new Mesh();
 
     const Vertex* vertices = static_cast<const Vertex*>(vertexData);
@@ -143,7 +151,19 @@ Mesh* Renderer::getOrCreateMesh(uint64_t entityId, const void* vertexData, size_
     mesh->create(context);
 
     meshCache[entityId] = mesh;
+
+    std::cout << "[Renderer] Created mesh for entity " << entityId
+        << " with " << vertexCount << " vertices" << std::endl;
+
     return mesh;
+}
+
+Mesh* Renderer::getMeshFromCache(uint64_t entityId) {
+    auto it = meshCache.find(entityId);
+    if (it != meshCache.end()) {
+        return it->second;
+    }
+    return nullptr;
 }
 
 void Renderer::removeMesh(uint64_t entityId) {
@@ -374,10 +394,12 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
             obj.mesh->draw(commandBuffer);
         }
     }
+
+    // Render UI if callback is set
     if (uiRenderCallback_) {
-        std::cout << "[DEBUG] Rendering UI..." << std::endl;
         uiRenderCallback_(commandBuffer);
     }
+
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {

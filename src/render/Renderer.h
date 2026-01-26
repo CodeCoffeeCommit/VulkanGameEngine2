@@ -1,3 +1,5 @@
+// src/render/Renderer.h
+
 #pragma once
 
 #define GLFW_INCLUDE_VULKAN
@@ -31,7 +33,6 @@ public:
 
     using UIRenderCallback = std::function<void(VkCommandBuffer)>;
     void setUIRenderCallback(std::function<void(VkCommandBuffer)> callback);
-   // void setUIRenderCallback(UIRenderCallback callback) { uiRenderCallback_ = callback; }
 
     void init(VulkanContext* context, SwapChain* swapChain);
     void cleanup();
@@ -48,8 +49,13 @@ public:
         const glm::vec3& color = glm::vec3(0.8f), bool selected = false);
     void clearSubmissions();
 
+    // Get or create mesh in cache - creates GPU buffers if vertexData provided
     Mesh* getOrCreateMesh(uint64_t entityId, const void* vertexData, size_t vertexCount,
         const uint32_t* indexData, size_t indexCount);
+
+    // Get mesh from cache without creating (returns nullptr if not found)
+    Mesh* getMeshFromCache(uint64_t entityId);
+
     void removeMesh(uint64_t entityId);
 
     Grid* getGrid() { return grid; }
@@ -67,7 +73,9 @@ private:
 
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Camera* camera);
     void updateUniformBuffer(uint32_t currentImage, Camera* camera);
+
     std::function<void(VkCommandBuffer)> uiRenderCallback_;
+
     VulkanContext* context = nullptr;
     SwapChain* swapChain = nullptr;
     GraphicsPipeline* pipeline = nullptr;

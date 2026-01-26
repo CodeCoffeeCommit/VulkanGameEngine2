@@ -57,20 +57,13 @@ namespace libre {
         // ========================================================================
 
         void requestSwapchainRecreate(uint32_t width, uint32_t height);
-        bool isSwapchainRecreatePending() const {
-            return swapchainRecreateRequested_.load(std::memory_order_acquire);
-        }
+        void getSwapchainExtent(uint32_t& width, uint32_t& height) const;
 
         // ========================================================================
         // VULKAN ACCESS (for UI initialization)
-        // These provide read-only access to Vulkan objects for UI setup
         // ========================================================================
 
         VulkanContext* getVulkanContext() const { return vulkanContext_.get(); }
-        SwapChain* getSwapChain() const { return swapChain_.get(); }
-        Renderer* getRenderer() const { return renderer_.get(); }
-
-        // Get render pass for UI pipeline creation
         VkRenderPass getRenderPass() const;
 
         // ========================================================================
@@ -79,16 +72,15 @@ namespace libre {
 
         MeshHandle registerMesh(const void* vertices, size_t vertexCount,
             const uint32_t* indices, size_t indexCount,
-            uint64_t entityId);
+            uint64_t entityId = 0);
         void unregisterMesh(MeshHandle handle);
         void updateMeshRegion(MeshHandle handle, uint32_t startVertex,
             uint32_t vertexCount, const void* vertexData);
 
         // ========================================================================
-        // QUERIES
+        // STATISTICS
         // ========================================================================
 
-        void getSwapchainExtent(uint32_t& width, uint32_t& height) const;
         uint64_t getLastCompletedFrame() const {
             return lastCompletedFrame_.load(std::memory_order_acquire);
         }

@@ -173,7 +173,7 @@ namespace libre {
     }
 
     // ============================================================================
-    // RENDER THREAD MAIN LOOP
+    // THREAD MAIN LOOP
     // ============================================================================
 
     void RenderThread::threadMain() {
@@ -329,24 +329,43 @@ namespace libre {
         // Clear previous submissions
         renderer_->clearSubmissions();
 
-        // Sync ECS data to renderer - submit meshes from frame data
-        for (const auto& rm : frameData.meshes) {
-            // Get mesh from the renderer's cache using entity ID
-            auto* mesh = renderer_->getOrCreateMesh(rm.entityId, nullptr, 0, nullptr, 0);
-            if (mesh) {
-                renderer_->submitMesh(mesh, rm.modelMatrix, rm.color, rm.isSelected);
+        // =========================================================================
+        // STEP 1: Upload any new/dirty meshes to GPU
+        // =========================================================================
+        for (const auto& upload : frameData.meshUploads) {
+            if (!upload.vertices.empty()) {
+                renderer_->getOrCreateMesh(
+                    upload.entityId,
+                    upload.vertices.data(),
+                    upload.vertices.size(),
+                    upload.indices.data(),
+                    upload.indices.size()
+                );
             }
         }
 
         // =========================================================================
-        // CONNECT UI CALLBACK TO RENDERER
-        // This is called during command buffer recording
+        // STEP 2: Submit meshes for rendering
+        // =========================================================================
+        for (const auto& rm : frameData.meshes) {
+            auto* mesh = renderer_->getMeshFromCache(rm.entityId);
+            if (mesh) {
+                renderer_->submitMesh(
+                    mesh,
+                    rm.modelMatrix,
+                    glm::vec3(rm.color),
+                    rm.isSelected
+                );
+            }
+        }
+
+        // =========================================================================
+        // STEP 3: Connect UI callback to renderer
         // =========================================================================
         {
             std::lock_guard<std::mutex> lock(callbackMutex_);
             if (uiRenderCallback_) {
                 renderer_->setUIRenderCallback([this](VkCommandBuffer cmd) {
-                    // Get current callback under lock
                     std::function<void(void*)> callback;
                     {
                         std::lock_guard<std::mutex> innerLock(callbackMutex_);
@@ -362,13 +381,14 @@ namespace libre {
             }
         }
 
-        // Create a temporary camera for rendering
+        // =========================================================================
+        // STEP 4: Create camera and draw frame
+        // =========================================================================
         Camera tempCamera;
         tempCamera.setViewMatrix(frameData.camera.viewMatrix);
         tempCamera.setProjectionMatrix(frameData.camera.projectionMatrix);
         tempCamera.setPosition(frameData.camera.position);
 
-        // Draw the frame
         bool success = renderer_->drawFrame(&tempCamera);
 
         if (!success) {

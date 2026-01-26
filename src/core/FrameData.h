@@ -36,6 +36,24 @@ namespace libre {
     constexpr BufferHandle INVALID_BUFFER_HANDLE = 0;
 
     // ============================================================================
+    // MESH UPLOAD DATA - For uploading new meshes to GPU
+    // ============================================================================
+
+    // Vertex data for GPU upload - matches renderer's Vertex struct
+    struct UploadVertex {
+        glm::vec3 position;
+        glm::vec3 normal;
+        glm::vec3 color;
+    };
+
+    // Data needed to upload a new mesh to GPU
+    struct MeshUploadData {
+        uint64_t entityId = 0;
+        std::vector<UploadVertex> vertices;
+        std::vector<uint32_t> indices;
+    };
+
+    // ============================================================================
     // RENDERABLE OBJECT
     // ============================================================================
     // Represents one object to be drawn. Uses handles, not pointers.
@@ -91,8 +109,8 @@ namespace libre {
     // ============================================================================
 
     struct LightData {
-        glm::vec3 direction = glm::normalize(glm::vec3(0.5f, 0.7f, 0.5f));
-        glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f);
+        glm::vec4 direction = glm::vec4(glm::normalize(glm::vec3(0.5f, 0.7f, 0.5f)), 0.0f);
+        glm::vec4 color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
         float intensity = 1.0f;
         float ambientStrength = 0.15f;
     };
@@ -166,6 +184,9 @@ namespace libre {
         // Objects to render (copied each frame)
         std::vector<RenderableMesh> meshes;
 
+        // Meshes that need to be uploaded to GPU this frame
+        std::vector<MeshUploadData> meshUploads;
+
         // Incremental mesh updates (for sculpting - future)
         std::vector<MeshDirtyRegion> dirtyRegions;
 
@@ -186,6 +207,7 @@ namespace libre {
 
         void clear() {
             meshes.clear();
+            meshUploads.clear();
             dirtyRegions.clear();
             frameNumber = 0;
         }
