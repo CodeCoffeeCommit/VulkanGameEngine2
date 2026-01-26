@@ -1,8 +1,6 @@
 // src/core/Application.cpp
-//
-// NEW ARCHITECTURE: Main thread never blocks on GPU.
-// All rendering happens on dedicated RenderThread.
-//
+// COMPLETE FILE - Replace your existing Application.cpp with this
+// INCLUDES DIAGNOSTIC LOGGING in prepareFrameData()
 
 #include "Application.h"
 #include "Editor.h"
@@ -16,6 +14,11 @@
 
 #include <iostream>
 #include <algorithm>
+
+// Window settings
+static constexpr int WINDOW_WIDTH = 1600;
+static constexpr int WINDOW_HEIGHT = 900;
+static constexpr const char* WINDOW_TITLE = "LibreDCC - 3D Viewport";
 
 Application::Application() {
     std::cout << "====================================" << std::endl;
@@ -47,7 +50,7 @@ void Application::init() {
     // Create window (Main Thread owns this)
     window = std::make_unique<Window>(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE);
 
-    // Create input manager - takes Window* in constructor
+    // Create input manager
     inputManager = std::make_unique<InputManager>(window.get());
 
     // Initialize Editor singleton
@@ -312,7 +315,6 @@ void Application::processInput(float dt) {
         if (uiManager) {
             uiManager->onMouseButton(libre::ui::MouseButton::Left, true);
         }
-        // Selection handling would go here when implemented
     }
 
     if (inputManager->isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_LEFT)) {
@@ -370,13 +372,13 @@ void Application::processInput(float dt) {
         lastMouseY = mouseY;
     }
 
-    // Scroll wheel - zoom
+    // Zoom (scroll wheel)
     double scrollY = inputManager->getScrollY();
     if (scrollY != 0.0) {
+        camera->zoom(static_cast<float>(scrollY) * 0.5f);
         if (uiManager) {
             uiManager->onMouseScroll(static_cast<float>(scrollY));
         }
-        camera->zoom(static_cast<float>(scrollY) * 0.5f);
     }
 
     // Keyboard shortcuts
@@ -384,9 +386,14 @@ void Application::processInput(float dt) {
         glfwSetWindowShouldClose(window->getHandle(), GLFW_TRUE);
     }
 
-    // Forward keyboard events to UI
+    // Forward key events to UI
     if (uiManager) {
-        for (int key = GLFW_KEY_SPACE; key <= GLFW_KEY_LAST; key++) {
+        const int keysToCheck[] = {
+            GLFW_KEY_BACKSPACE, GLFW_KEY_DELETE, GLFW_KEY_LEFT, GLFW_KEY_RIGHT,
+            GLFW_KEY_HOME, GLFW_KEY_END, GLFW_KEY_ENTER, GLFW_KEY_TAB
+        };
+
+        for (int key : keysToCheck) {
             if (inputManager->isKeyJustPressed(key)) {
                 uiManager->onKey(key, true, shiftHeld, ctrlHeld, altHeld);
             }
@@ -431,7 +438,7 @@ void Application::updateTransforms() {
 }
 
 // ============================================================================
-// PREPARE FRAME DATA
+// PREPARE FRAME DATA - WITH DIAGNOSTIC LOGGING
 // ============================================================================
 
 libre::FrameData Application::prepareFrameData() {
@@ -471,16 +478,32 @@ libre::FrameData Application::prepareFrameData() {
     data.ui.screenWidth = static_cast<float>(w);
     data.ui.screenHeight = static_cast<float>(h);
 
-    // Collect meshes from ECS
+    // ========================================================================
+    // COLLECT MESHES FROM ECS - WITH DIAGNOSTIC LOGGING
+    // ========================================================================
     auto& editor = libre::Editor::instance();
     auto& world = editor.getWorld();
 
+    // Diagnostic counters
+    size_t totalMeshComponents = 0;
+    size_t meshesNeedingUpload = 0;
+
     world.forEach<libre::MeshComponent>([&](libre::EntityID id, libre::MeshComponent& meshComp) {
+        totalMeshComponents++;
+
         auto* transform = world.getComponent<libre::TransformComponent>(id);
         auto* render = world.getComponent<libre::RenderComponent>(id);
 
         if (!transform) return;
         if (render && !render->visible) return;
+
+        // === DIAGNOSTIC: Print mesh component state (first 5 frames only) ===
+        if (data.frameNumber <= 5) {
+            std::cout << "[prepareFrameData] Entity " << id
+                << " | gpuDirty=" << (meshComp.gpuDirty ? "TRUE" : "false")
+                << " | vertices=" << meshComp.vertices.size()
+                << " | indices=" << meshComp.indices.size() << std::endl;
+        }
 
         // Add to render list
         libre::RenderableMesh rm;
@@ -500,6 +523,8 @@ libre::FrameData Application::prepareFrameData() {
 
         // Check if mesh needs GPU upload
         if (meshComp.gpuDirty && !meshComp.vertices.empty()) {
+            meshesNeedingUpload++;
+
             libre::MeshUploadData upload;
             upload.entityId = id;
 
@@ -516,10 +541,25 @@ libre::FrameData Application::prepareFrameData() {
 
             data.meshUploads.push_back(std::move(upload));
 
+            // === DIAGNOSTIC: Log upload ===
+            if (data.frameNumber <= 5) {
+                std::cout << "[prepareFrameData] >>> QUEUED upload for entity " << id
+                    << " (" << meshComp.vertices.size() << " verts, "
+                    << meshComp.indices.size() << " indices)" << std::endl;
+            }
+
             // Mark as clean - will be uploaded this frame
             meshComp.gpuDirty = false;
         }
         });
+
+    // === DIAGNOSTIC: Summary (first 5 frames only) ===
+    if (data.frameNumber <= 5) {
+        std::cout << "[prepareFrameData] Frame " << data.frameNumber
+            << " | MeshComponents: " << totalMeshComponents
+            << " | NeedUpload: " << meshesNeedingUpload
+            << " | Renderables: " << data.meshes.size() << std::endl;
+    }
 
     return data;
 }
@@ -532,4 +572,8 @@ bool Application::isMinimized() const {
     int w, h;
     glfwGetFramebufferSize(window->getHandle(), &w, &h);
     return (w == 0 || h == 0);
+}
+
+void Application::handleSelection() {
+    // Placeholder for future selection implementation
 }

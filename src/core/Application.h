@@ -1,13 +1,5 @@
 // src/core/Application.h
-//
-// APPLICATION - Main entry point and coordinator
-//
-// NEW ARCHITECTURE:
-// - Main thread: Window messages, input, UI logic, game logic
-// - Render thread: All Vulkan operations (owned by RenderThread)
-//
-// Main thread NEVER blocks. All GPU work happens on render thread.
-//
+// COMPLETE FILE - Replace your existing Application.h with this
 
 #pragma once
 
@@ -107,11 +99,4 @@ private:
     bool shiftHeld = false;
     bool ctrlHeld = false;
     bool altHeld = false;
-
-    // ========================================================================
-    // CONSTANTS
-    // ========================================================================
-    static constexpr int WINDOW_WIDTH = 1280;
-    static constexpr int WINDOW_HEIGHT = 720;
-    static constexpr const char* WINDOW_TITLE = "LibreDCC - 3D Viewport";
 };
