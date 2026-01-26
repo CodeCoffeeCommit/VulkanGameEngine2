@@ -24,11 +24,13 @@ public:
     VkSurfaceKHR getSurface() const { return surface; }
     VkQueue getGraphicsQueue() const { return graphicsQueue; }
     VkQueue getPresentQueue() const { return presentQueue; }
+    VkCommandPool getCommandPool() const { return commandPool; }
 
     uint32_t getGraphicsQueueFamily() const { return queueIndices.graphicsFamily.value(); }
     uint32_t getPresentQueueFamily() const { return queueIndices.presentFamily.value(); }
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
+    
 private:
     // Store window pointer
     Window* window;
@@ -39,6 +41,7 @@ private:
     void createSurface();
     void pickPhysicalDevice();
     void createLogicalDevice();
+    void createCommandPool();
 
     // Helper functions
     bool checkValidationLayerSupport();
@@ -70,6 +73,8 @@ private:
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+
 
     VkQueue graphicsQueue = VK_NULL_HANDLE;
     VkQueue presentQueue = VK_NULL_HANDLE;
