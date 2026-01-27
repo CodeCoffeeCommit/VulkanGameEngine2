@@ -6,6 +6,7 @@
 #include <LibreUI/Widget.h>
 #include <LibreUI/Theme.h>
 #include <vector>
+#include <LibreUI/Export.h>
 
 namespace LibreUI {
 
@@ -13,7 +14,7 @@ namespace LibreUI {
     // MENU ITEM
     // ============================================================================
 
-    class MenuItem {
+    class LIBREUI_API MenuItem {
     public:
         std::string label;
         std::string shortcut;           // "Ctrl+Z", "F3", etc.
@@ -81,7 +82,7 @@ namespace LibreUI {
     // MENU BAR
     // ============================================================================
 
-    class MenuBar : public Widget {
+    class LIBREUI_API MenuBar : public Widget {
     public:
         MenuBar();
 

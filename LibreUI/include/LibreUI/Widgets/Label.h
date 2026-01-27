@@ -6,9 +6,11 @@
 #include <LibreUI/Widget.h>
 #include <LibreUI/Theme.h>
 
+#include <LibreUI/Export.h>
+
 namespace LibreUI {
 
-    class Label : public Widget {
+    class LIBREUI_API Label : public Widget {
     public:
         Label(const std::string& text = "");
 

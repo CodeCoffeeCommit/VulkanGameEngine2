@@ -5,10 +5,12 @@
 
 #include <LibreUI/Types.h>
 
+#include <LibreUI/Export.h>
+
 
 namespace LibreUI {
 
-    struct Theme {
+    struct LIBREUI_API Theme {
         // ====================================================================
         // COLORS (not scaled)
         // ====================================================================
@@ -96,6 +98,6 @@ namespace LibreUI {
     };
 
     // Global theme accessor
-    Theme& GetTheme();
+    LIBREUI_API Theme& GetTheme();
 
 } // namespace LibreUI

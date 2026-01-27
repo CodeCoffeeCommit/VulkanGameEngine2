@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\LibreUI\Events.h" />
+    <ClInclude Include="include\LibreUI\Export.h" />
     <ClInclude Include="include\LibreUI\LibreUI.h" />
     <ClInclude Include="include\LibreUI\Renderer.h" />
     <ClInclude Include="include\LibreUI\Scale.h" />

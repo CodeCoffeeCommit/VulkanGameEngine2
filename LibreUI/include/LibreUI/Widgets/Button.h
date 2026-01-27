@@ -5,10 +5,11 @@
 
 #include <LibreUI/Widget.h>
 #include <LibreUI/Theme.h>
+#include <LibreUI/Export.h>
 
 namespace LibreUI {
 
-    class Button : public Widget {
+    class LIBREUI_API Button : public Widget {
     public:
         Button(const std::string& text = "");
 

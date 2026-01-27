@@ -7,6 +7,8 @@
 #include <LibreUI/Types.h>
 #include <string>
 
+#include <LibreUI/Export.h>
+
 namespace LibreUI {
 
     // ============================================================================
@@ -24,7 +26,7 @@ namespace LibreUI {
     // ABSTRACT RENDERER INTERFACE
     // ============================================================================
 
-    class Renderer {
+    class LIBREUI_API Renderer {
     public:
         virtual ~Renderer() = default;
 

@@ -54,6 +54,9 @@
     <ClInclude Include="include\LibreUI\LibreUI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\LibreUI\Export.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Core\Theme.cpp">

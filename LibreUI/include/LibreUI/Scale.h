@@ -6,9 +6,11 @@
 
 #include <algorithm>
 
+#include <LibreUI/Export.h>
+
 namespace LibreUI {
 
-    class Scale {
+    class LIBREUI_API Scale {
     public:
         // Singleton access
         static Scale& instance() {

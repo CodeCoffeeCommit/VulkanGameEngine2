@@ -9,6 +9,8 @@
 #include <memory>
 #include <string>
 
+#include <LibreUI/Export.h>
+
 namespace LibreUI {
 
     // Forward declaration - Renderer will be defined later
@@ -18,7 +20,7 @@ namespace LibreUI {
     // BASE WIDGET
     // ============================================================================
 
-    class Widget {
+    class LIBREUI_API Widget {
     public:
         virtual ~Widget() = default;
 

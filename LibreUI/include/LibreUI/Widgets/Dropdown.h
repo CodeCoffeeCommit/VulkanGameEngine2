@@ -6,10 +6,11 @@
 #include <LibreUI/Widget.h>
 #include <LibreUI/Theme.h>
 #include <vector>
+#include <LibreUI/Export.h>
 
 namespace LibreUI {
 
-    class Dropdown : public Widget {
+    class LIBREUI_API Dropdown : public Widget {
     public:
         Dropdown();
 

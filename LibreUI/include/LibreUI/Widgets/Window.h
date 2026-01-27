@@ -5,10 +5,11 @@
 
 #include <LibreUI/Widget.h>
 #include <LibreUI/Theme.h>
+#include <LibreUI/Export.h>
 
 namespace LibreUI {
 
-    class Window : public Widget {
+    class LIBREUI_API Window : public Widget {
     public:
         Window(const std::string& title = "");
 
