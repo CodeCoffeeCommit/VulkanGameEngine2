@@ -19,9 +19,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="FileName.cpp" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="..\include\LibreUI\Events.h" />
     <ClInclude Include="..\include\LibreUI\Types.h" />
   </ItemGroup>
