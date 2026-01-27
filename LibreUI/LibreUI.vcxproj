@@ -23,10 +23,12 @@
     <ClInclude Include="include\LibreUI\Scale.h" />
     <ClInclude Include="include\LibreUI\Theme.h" />
     <ClInclude Include="include\LibreUI\Types.h" />
+    <ClInclude Include="include\LibreUI\Widget.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Core\Scale.cpp" />
     <ClCompile Include="src\Core\Theme.cpp" />
+    <ClCompile Include="src\Widgets\Widget.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

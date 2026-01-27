@@ -27,12 +27,18 @@
     <ClInclude Include="include\LibreUI\Types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\LibreUI\Widget.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Core\Theme.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Core\Scale.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Widgets\Widget.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
