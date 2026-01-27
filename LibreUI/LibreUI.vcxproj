@@ -27,6 +27,7 @@
     <ClInclude Include="include\LibreUI\Widget.h" />
     <ClInclude Include="include\LibreUI\Widgets\Button.h" />
     <ClInclude Include="include\LibreUI\Widgets\Label.h" />
+    <ClInclude Include="include\LibreUI\Widgets\Menu.h" />
     <ClInclude Include="include\LibreUI\Widgets\Panel.h" />
   </ItemGroup>
   <ItemGroup>
@@ -34,6 +35,7 @@
     <ClCompile Include="src\Core\Theme.cpp" />
     <ClCompile Include="src\Widgets\Button.cpp" />
     <ClCompile Include="src\Widgets\Label.cpp" />
+    <ClCompile Include="src\Widgets\Menu.cpp" />
     <ClCompile Include="src\Widgets\Panel.cpp" />
     <ClCompile Include="src\Widgets\Widget.cpp" />
   </ItemGroup>
