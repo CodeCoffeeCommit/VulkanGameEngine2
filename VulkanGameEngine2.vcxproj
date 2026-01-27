@@ -200,7 +200,7 @@ glfw3dll.lib;freetype.lib
     <None Include="shaders\workbench.vert" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="LibreUI\LibreUI\LibreUI.vcxproj">
+    <ProjectReference Include="LibreUI\LibreUI.vcxproj">
       <Project>{2069620b-0324-409d-b97e-ae0676c849f6}</Project>
     </ProjectReference>
   </ItemGroup>

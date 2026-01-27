@@ -15,11 +15,25 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\LibreUI\Types.h">
+    <ClInclude Include="include\LibreUI\Scale.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\LibreUI\Events.h">
+    <ClInclude Include="include\LibreUI\Theme.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\LibreUI\Events.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\LibreUI\Types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Core\Theme.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\Scale.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
