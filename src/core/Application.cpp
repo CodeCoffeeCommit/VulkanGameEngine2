@@ -14,9 +14,15 @@
 #include "../ui/UIScale.h"
 #include <unordered_set>
 
+
+
 #include <iostream>
 #include <algorithm>
 #include <thread>
+
+
+// Add this declaration (temporary)
+extern void LibreUI_RunTests();
 
 // Window settings
 static constexpr int WINDOW_WIDTH = 1600;
@@ -44,6 +50,9 @@ void Application::run() {
 // ============================================================================
 
 void Application::init() {
+    LibreUI_RunTests();  // Temporary - remove after testing
+    
+    
     std::cout << "\n=== Initializing Application ===" << std::endl;
 
     // Record start time
