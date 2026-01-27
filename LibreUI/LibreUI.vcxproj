@@ -26,18 +26,22 @@
     <ClInclude Include="include\LibreUI\Types.h" />
     <ClInclude Include="include\LibreUI\Widget.h" />
     <ClInclude Include="include\LibreUI\Widgets\Button.h" />
+    <ClInclude Include="include\LibreUI\Widgets\Dropdown.h" />
     <ClInclude Include="include\LibreUI\Widgets\Label.h" />
     <ClInclude Include="include\LibreUI\Widgets\Menu.h" />
     <ClInclude Include="include\LibreUI\Widgets\Panel.h" />
+    <ClInclude Include="include\LibreUI\Widgets\Window.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Core\Scale.cpp" />
     <ClCompile Include="src\Core\Theme.cpp" />
     <ClCompile Include="src\Widgets\Button.cpp" />
+    <ClCompile Include="src\Widgets\Dropdown.cpp" />
     <ClCompile Include="src\Widgets\Label.cpp" />
     <ClCompile Include="src\Widgets\Menu.cpp" />
     <ClCompile Include="src\Widgets\Panel.cpp" />
     <ClCompile Include="src\Widgets\Widget.cpp" />
+    <ClCompile Include="src\Widgets\Window.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

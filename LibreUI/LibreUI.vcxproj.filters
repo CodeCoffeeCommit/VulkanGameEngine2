@@ -45,6 +45,12 @@
     <ClInclude Include="include\LibreUI\Widgets\Menu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\LibreUI\Widgets\Window.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\LibreUI\Widgets\Dropdown.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Core\Theme.cpp">
@@ -66,6 +72,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Widgets\Menu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Widgets\Window.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Widgets\Dropdown.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
