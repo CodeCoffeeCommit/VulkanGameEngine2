@@ -66,38 +66,31 @@ namespace libre::ui {
         float getScreenHeight() const override;
 
     private:
-        // --------------------------------------------------------------------
         // Type aliases to avoid namespace ambiguity
-        // --------------------------------------------------------------------
         using InternalFontWeight = ::libre::ui::FontWeight;
         using InternalRect = ::libre::ui::Rect;
         using InternalColor = ::libre::ui::Color;
         using InternalVec2 = ::libre::ui::Vec2;
-
+        
+        
         // --------------------------------------------------------------------
         // Type conversion helpers
         // --------------------------------------------------------------------
 
-        static InternalRect toInternal(const LibreUI::Rect& r) {
-            return InternalRect(r.x, r.y, r.w, r.h);
+        static Rect toInternal(const LibreUI::Rect& r) {
+            return Rect(r.x, r.y, r.w, r.h);
         }
 
-        static InternalColor toInternal(const LibreUI::Color& c) {
-            return InternalColor(c.r, c.g, c.b, c.a);
+        static Color toInternal(const LibreUI::Color& c) {
+            return Color(c.r, c.g, c.b, c.a);
         }
 
-        static LibreUI::Vec2 toLibreUI(const InternalVec2& v) {
+        static LibreUI::Vec2 toLibreUI(const Vec2& v) {
             return LibreUI::Vec2(v.x, v.y);
         }
 
         static InternalFontWeight toInternal(LibreUI::FontWeight w) {
-            switch (w) {
-            case LibreUI::FontWeight::Light:   return InternalFontWeight::Light;
-            case LibreUI::FontWeight::Regular: return InternalFontWeight::Regular;
-            case LibreUI::FontWeight::Medium:  return InternalFontWeight::Medium;
-            case LibreUI::FontWeight::Bold:    return InternalFontWeight::Bold;
-            default: return InternalFontWeight::Regular;
-            }
+            return static_cast<InternalFontWeight>(static_cast<int>(w));
         }
 
         // --------------------------------------------------------------------

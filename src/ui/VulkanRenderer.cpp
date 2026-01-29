@@ -1,43 +1,27 @@
 // src/ui/VulkanRenderer.cpp
-// Vulkan implementation of LibreUI::Renderer
+// Minimal test version
 
 #include "VulkanRenderer.h"
-#include <iostream>
 
 namespace libre::ui {
 
-    // ========================================================================
-    // INITIALIZATION
-    // ========================================================================
-
     void VulkanRenderer::init(VulkanContext* context, VkRenderPass renderPass) {
         impl_.init(context, renderPass);
-        std::cout << "[OK] VulkanRenderer initialized (LibreUI adapter)\n";
     }
 
     void VulkanRenderer::cleanup() {
         impl_.cleanup();
     }
 
-    // ========================================================================
-    // FRAME LIFECYCLE
-    // ========================================================================
-
     void VulkanRenderer::begin(float screenWidth, float screenHeight) {
         impl_.begin(screenWidth, screenHeight);
     }
 
     void VulkanRenderer::end() {
-        if (commandBuffer_ == VK_NULL_HANDLE) {
-            std::cerr << "[VulkanRenderer] WARNING: end() called without command buffer!\n";
-            return;
+        if (commandBuffer_ != VK_NULL_HANDLE) {
+            impl_.end(commandBuffer_);
         }
-        impl_.end(commandBuffer_);
     }
-
-    // ========================================================================
-    // PRIMITIVE DRAWING
-    // ========================================================================
 
     void VulkanRenderer::drawRect(const LibreUI::Rect& bounds, const LibreUI::Color& color) {
         impl_.drawRect(toInternal(bounds), toInternal(color));
@@ -51,10 +35,6 @@ namespace libre::ui {
         impl_.drawRectOutline(toInternal(bounds), toInternal(color), thickness);
     }
 
-    // ========================================================================
-    // TEXT RENDERING
-    // ========================================================================
-
     void VulkanRenderer::drawText(const std::string& text, float x, float y,
         const LibreUI::Color& color, float size) {
         impl_.drawText(text, x, y, toInternal(color), size);
@@ -67,17 +47,15 @@ namespace libre::ui {
     }
 
     LibreUI::Vec2 VulkanRenderer::measureText(const std::string& text, float size) {
-        return toLibreUI(impl_.measureText(text, size));
+        Vec2 v = impl_.measureText(text, size);
+        return LibreUI::Vec2(v.x, v.y);
     }
 
     LibreUI::Vec2 VulkanRenderer::measureTextEx(const std::string& text, float size,
         const std::string& fontName, LibreUI::FontWeight weight) {
-        return toLibreUI(impl_.measureTextEx(text, size, fontName, toInternal(weight)));
+        Vec2 v = impl_.measureTextEx(text, size, fontName, toInternal(weight));
+        return LibreUI::Vec2(v.x, v.y);
     }
-
-    // ========================================================================
-    // CLIPPING
-    // ========================================================================
 
     void VulkanRenderer::pushClip(const LibreUI::Rect& bounds) {
         impl_.pushClip(toInternal(bounds));
@@ -86,10 +64,6 @@ namespace libre::ui {
     void VulkanRenderer::popClip() {
         impl_.popClip();
     }
-
-    // ========================================================================
-    // STATE QUERIES
-    // ========================================================================
 
     float VulkanRenderer::getScreenWidth() const {
         return impl_.getScreenWidth();

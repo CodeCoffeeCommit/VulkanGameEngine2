@@ -120,7 +120,7 @@
     <ClCompile Include="src\render\RenderThread.cpp">
       <Filter>Source Files\render</Filter>
     </ClCompile>
-    <ClCompile Include="src\ui\VulkanRenderer.cpp">
+    <ClCompile Include="src\ui\Vulkanrenderer.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
   </ItemGroup>

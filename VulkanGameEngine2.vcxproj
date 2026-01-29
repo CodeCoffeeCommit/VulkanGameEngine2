@@ -77,6 +77,9 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>false</MultiProcessorCompilation>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>;$(ProjectDir)src;$(ProjectDir)LibreUI\include;$(VULKAN_SDK)\Include;C:\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -91,6 +94,9 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>false</MultiProcessorCompilation>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>;$(ProjectDir)src;$(ProjectDir)LibreUI\include;$(VULKAN_SDK)\Include;C:\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -103,7 +109,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)LibreUI\include;$(VULKAN_SDK)\Include;C:\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(VULKAN_SDK)\Include;C:\vcpkg\installed\x64-windows\include;$(ProjectDir)src;$(ProjectDir)LibreUI\include;$(VULKAN_SDK)\Include;C:\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -123,6 +130,9 @@ glfw3dll.lib;freetype.lib
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>false</MultiProcessorCompilation>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>;$(ProjectDir)src;$(ProjectDir)LibreUI\include;$(VULKAN_SDK)\Include;C:\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -151,7 +161,7 @@ glfw3dll.lib;freetype.lib
     <ClCompile Include="src\ui\Theme.cpp" />
     <ClCompile Include="src\ui\UIRenderer.cpp" />
     <ClCompile Include="src\ui\UI.cpp" />
-    <ClCompile Include="src\ui\VulkanRenderer.cpp" />
+    <ClCompile Include="src\ui\Vulkanrenderer.cpp" />
     <ClCompile Include="src\ui\Widgets.cpp" />
     <ClCompile Include="src\world\World.cpp" />
   </ItemGroup>
