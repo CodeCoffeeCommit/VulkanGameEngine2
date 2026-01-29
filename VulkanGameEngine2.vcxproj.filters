@@ -120,6 +120,9 @@
     <ClCompile Include="src\render\RenderThread.cpp">
       <Filter>Source Files\render</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\VulkanRenderer.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\components\CoreComponents.h">
@@ -223,6 +226,9 @@
     </ClInclude>
     <ClInclude Include="src\render\RenderThread.h">
       <Filter>Header Files\render</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\VulkanRenderer.h">
+      <Filter>Header Files\ui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

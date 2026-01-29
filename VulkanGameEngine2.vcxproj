@@ -103,7 +103,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)src;$(VULKAN_SDK)\Include;C:\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)LibreUI\include;$(VULKAN_SDK)\Include;C:\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -151,6 +151,7 @@ glfw3dll.lib;freetype.lib
     <ClCompile Include="src\ui\Theme.cpp" />
     <ClCompile Include="src\ui\UIRenderer.cpp" />
     <ClCompile Include="src\ui\UI.cpp" />
+    <ClCompile Include="src\ui\VulkanRenderer.cpp" />
     <ClCompile Include="src\ui\Widgets.cpp" />
     <ClCompile Include="src\world\World.cpp" />
   </ItemGroup>
@@ -183,6 +184,7 @@ glfw3dll.lib;freetype.lib
     <ClInclude Include="src\ui\UIRenderer.h" />
     <ClInclude Include="src\ui\UI.h" />
     <ClInclude Include="src\ui\UIScale.h" />
+    <ClInclude Include="src\ui\VulkanRenderer.h" />
     <ClInclude Include="src\ui\Widgets.h" />
     <ClInclude Include="src\world\ComponentStorage.h" />
     <ClInclude Include="src\world\Primitives.h" />
